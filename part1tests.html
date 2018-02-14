@@ -1,0 +1,249 @@
+<html>
+<head>
+<title>Testing Your Interpreter, Part 1</title>
+</head>
+
+<body>
+<h3>Testing Your Interpreter, Part 1</h3>
+
+<p>Test 1: This code should return 150.
+<pre>
+return 150;
+</pre></p>
+
+<p>Test 2: This code should return -4.
+<pre>
+return 6 * (8 + (5 % 3)) / 11 - 9;
+</pre>
+</p>
+
+<p>Test 3: This code should return 10.
+<pre>
+var z;
+z = 10;
+return z;
+</pre></p>
+
+<p>Test 4: This code should return 16.
+<pre>
+var x = (5 * 7 - 3) / 2;
+return x;
+</pre></p>
+
+<p>Test 5: This code should return 220.
+<pre>
+var x = 10;
+var y = 12 + x;
+return x * y;
+</pre></p>
+
+<p>Test 6: This code should return 5.
+<pre>
+var x = 5;
+var y = 6;
+var m;
+if (x <= y)
+  m = x;
+else
+  m = y;
+return m;
+</pre></p>
+
+<p>Test 7: This code should return 6.
+<pre>
+var x = 5;
+var y = 6;
+var m;
+if (x >= y)
+  m = x;
+else
+  m = y;
+return m;
+</pre>
+</p>
+
+<p>Test 8: This code should return 10.
+<pre>
+var x = 5;
+var y = 6;
+if (x != y)
+  x = 10;
+return x;
+</pre></p>
+
+<p>Test 9: This code should return 5.
+<pre>
+var x = 5;
+var y = 6;
+if (x == y)
+  x = 10;
+return x;
+</pre></p>
+
+<p>Test 10: This code should return -39.
+<pre>
+return 6 * -(4 * 2) + 9;
+</pre></p>
+
+<p>Test 11: This code should give an error (using before declaring).
+<pre>
+var x = 1;
+y = 10 + x;
+return y;
+</pre>
+</p>
+
+<p>Test 12: This code should give an error (using before declaring).
+<pre>
+var y;
+y = x;
+return y;
+</pre></p>
+
+<p>Test 13: This code should give an error (using before assigning). 
+<pre>
+var x;
+var y;
+x = x + y;
+return x;
+</pre></p>
+
+<p>Test 14: This code should give an error (redefining).  This is not a required error, but it would be nice if you
+could catch these.
+<pre>
+var x = 10;
+var y = 20;
+var x = x + y;
+return x;
+</pre></p>
+
+
+<p>Test 15: This code should return true (not #t).
+<pre>
+return (10 > 20) || (5 - 6 < 10) && true;
+</pre></p>
+
+<p>Test 16: This code should return 100.
+<pre>
+var x = 10;
+var y = 20;
+if (x < y && (x % 2) == 0)
+  return 100;
+else
+  return 200;
+</pre></p>
+
+<p>Test 17: This code should return false (not #f).
+<pre>
+var x = 100 % 2 == 0;
+var y = 10 >= 20;
+var z;
+if (x || y)
+  z = y;
+else
+  z = x;
+return z;
+</pre></p>
+
+<p>Test 18: This code should return true.
+<pre>
+var x = 10;
+var y = 20;
+var z = 20 >= 10;
+if (!z || false)
+  z = !z;
+else
+  z = z;
+return z;
+</pre></p>
+
+<p>Test 19: This code should return 128.
+<pre>
+var x = 2;
+while (x < 100)
+  x = x * 2;
+return x;
+</pre></p>
+
+<p>Test 20: This code should return 12;
+<pre>
+var x = 20;
+var y = 128;
+while (x * x > 128)
+  x = x - 1;
+x = x + 1;
+return x;
+</pre></p>
+
+<h4> Additional Tests for Students Looking for an Extra Challenge </h4>
+
+<p>Test 21: This code should return 30.
+<pre>
+var x;
+var y;
+var z = x = y = 10;
+return x + y + z;
+</pre></p>
+
+<p>Test 22: This code should return 11.
+<pre>
+var x;
+var y;
+x = y = 10;
+if ((x = x + 1) > y)
+  return x;
+else
+  return y;
+</pre></p>
+
+<p>Test 23: This code should return 1106.
+<pre>
+var x;
+var y = (x = 5) + (x = 6);
+return y * 100 + x;
+</pre></p>
+
+<p>Test 24: This code should return 12.
+<pre>
+var x = 10;
+x = (x = 6) + x;
+return x;
+</pre></p>
+
+<p>Test 25: This code should return 16.
+<pre>
+var x = 10;
+x = x + (x = 6);
+return x;
+</pre></p>
+
+<p>Test 26: This code should return 72.
+<pre>
+var x;
+var y;
+var z;
+var w = (x = 6) + (y = z = 20);
+return w + x + y + z;
+</pre></p>
+
+<p>Test 27: This code should return 21.
+<pre>
+var x = 0;
+while ((x = x + 1) < 21)
+  x = x;
+return x;
+</pre></p>
+
+<p>Test 28: This code should return 164.
+<pre>
+var a = 31160;
+var b = 1476;
+var r = a % b;
+while (r != 0)
+  r = (a = b) % (b = r);
+return b;
+</pre></p>
+
+</body>
+</html>
+
