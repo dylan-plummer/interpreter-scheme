@@ -47,9 +47,9 @@
 
 ;removeVar takes a var and removes it and returns the new state
 (define removeVar
-  (lambda (var, state)
+  (lambda (var state)
     (cond
       ((null? var) state ) ;null var, return given state
       ((null? state) '('() '()) ) ;null state, return stateEmpty
       ((eq? var (car (car state))) (cons (cadr (car state)) (cadr (cadr state)))) ;var match, return everything else
-      () ;not match, cons on (recurse)
+      (else (cons (cons (cdr (car state)) (cdr (cadr state))) (removeVar var (cons (cdr (car state)) (cdr (cadr state)))))))))
