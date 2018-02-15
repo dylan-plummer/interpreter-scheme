@@ -7,6 +7,47 @@
   (lambda (filename)
     (parser filename)))
 
-(define state-global
-  (lambda (parsetree)
-    
+(define evaulate
+  (lambda (parsetree state)
+    (if (null? parsetree)
+      state
+      (evaluate (cdr parsetree) (stateGlobal (car lis) state)))))
+
+;stateGlobal takes a statement and a state and returns the new state after
+;evaluating the statement
+(define stateGlobal
+  (lambda (statement state)
+    (cond
+      ((eq? (car statement) 'while) (stateWhile statement state))
+
+;stateWhile takes a while loop condition, a loop body statement, and a stateEmpty
+;and returns the
+(define stateWhile
+  (lambda (condition body state)
+
+
+(define stateEmpty
+  ('('() '())))
+
+;addToState takes a variable and data and adds it to a state
+(define addToState
+  (lambda (var data state)
+    (if (null? state)
+      (cons (list var) (list data))
+      (cons (cons var (car state)) (cons data (cadr state))))))
+
+;searchVar takes a var and a state and returns associated data
+(define searchVar
+  (lambda (var state)
+    (cond
+      ((null? state) '('()))
+      ((null? (cdr state)) '('() '()))
+      ((eq? var (caar state)) (cadr state))
+
+;removeVar takes a var and removes it and returns the new state
+(define removeVar
+  (lambda (var, state)
+    (cond
+      ((null? var) state )
+      ((null? state) '('() '()) )
+      ((eq? var (caar state))
