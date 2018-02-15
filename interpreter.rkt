@@ -18,12 +18,19 @@
 (define stateGlobal
   (lambda (statement state)
     (cond
-      ((eq? (car statement) 'while) (stateWhile statement state))
+      ((eq? (car statement) 'while) (stateWhile (whileConditon statement) (whilebody statement) state))
 
 ;stateWhile takes a while loop condition, a loop body statement, and a stateEmpty
 ;and returns the
 (define stateWhile
   (lambda (condition body state)
+    (if (stateBoolean condition)
+      (stateGlobal body state)
+      state)))
+(define whileConditon
+  cadr)
+(define whileBody
+  caddr)
 
 
 (define stateEmpty
