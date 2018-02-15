@@ -46,6 +46,7 @@
       (else (searchVar var (cdr state))))))
 
 ;removeVar takes a var and removes it and returns the new state
+;We should abstract some of the repetitive cars and cdrs
 (define removeVar
   (lambda (var state)
     (cond
