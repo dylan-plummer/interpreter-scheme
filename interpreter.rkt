@@ -40,9 +40,10 @@
 (define searchVar
   (lambda (var state)
     (cond
-      ((null? state) '('()))
-      ((null? (cdr state)) '('() '()))
+      ((null? state) null)
+      ((null? (cdr state)) null)
       ((eq? var (caar state)) (cadr state))
+      (else (searchVar var (cdr state))))))
 
 ;removeVar takes a var and removes it and returns the new state
 (define removeVar
