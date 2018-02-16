@@ -35,7 +35,6 @@
 (define assignmentExp
   cadr)
 
-
 ;stateWhile takes a while loop condition, a loop body statement, and a stateEmpty
 ;and returns the
 (define stateWhile
@@ -43,22 +42,37 @@
     (if (mathBoolean condition)
       (stateGlobal body state)
       state)))
-
 ;while helpers
 (define whileConditon cadr)
 
 (define whileBody caddr)
 
-;mathBoolean helpers
-(define boolEvalLR ;returns the right side of a statement with an equality
-  (lambda (stmt acc state)
-    (cond
-      ((null? stmt) '())
-      ((not (or (eq? (car stmt) '==) (eq? (car stmt) '!=) (eq? (car stmt) '<) (eq? (car stmt) '>) (eq? (car stmt) '<=) (eq? (car stmt) '>=))) (boolEvalLR (cdr stmt) (append acc (list (car stmt))) state))
-      (else (cons (mathValue acc state) (cons (car stmt) (mathValue (cdr stmt) state))))
-     )
-))
+;mathBoolean
+(define mathBoolean ;takes a condition, returns a #t/#f
+  (lambda (condition state)
+    (if (or (null? condition) (null? state))
+        '()
+        (conditionBoolEval (conditionMathEvalLR condition '() state)))))
 
+
+;mathBoolean helpers
+(define conditionMathEvalINFIX
+  (lambda (stmt state)
+    ((null? stmt) stmt)
+    (conditionBoolEval (cons (car stmt) (mathValue (cdr stmt))))))
+
+(define conditionBoolEval ;takes a fully evaluated infix condition statement
+  (lambda (stmt)
+    (cond
+      ((null? stmt) #f)
+      ((eq? (car stmt) '==) (= (cadr stmt) (caddr stmt)))
+      ((eq? (car stmt) '!=) (not (= (cadr stmt) (caddr stmt))))
+      ((eq? (car stmt) '<=) (or (> (cadr stmt) (caddr stmt)) (= (cadr stmt) (caddr stmt))))
+      ((eq? (car stmt) '>=) (or (> (cadr stmt) (caddr stmt)) (= (cadr stmt) (caddr stmt))))
+      ((eq? (car stmt) '<) (< (cadr stmt) (caddr stmt)))
+      ((eq? (car stmt) '>) (> (cadr stmt) (caddr stmt)))
+    )
+))
 
 ;stateReturn takes an expression and a state and adds the valuevalue of the expression
 ;to the state as the variable 'return
