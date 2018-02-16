@@ -48,6 +48,7 @@
       ((null? exp) '())
       ((not (list? exp)) exp)
       ((number? (operator exp)) error)
+      ((null? (cddr exp)) (- 0 (value (operand1 exp))))
       ((eq? '+ (operator exp)) (+ (value (operand1 exp)) (value (operand2 exp))))
       ((eq? '- (operator exp)) (- (value (operand1 exp)) (value (operand2 exp))))
       ((eq? '* (operator exp)) (* (value (operand1 exp)) (value (operand2 exp))))
@@ -83,7 +84,6 @@
   (lambda (var state)
     (cond
       ((null? state) stateEmpty)
-      ;((null? (cdr state)) null)
       ((eq? var (caar state)) (caadr state))
       (else (searchState var (list (cdr (name state)) (cdr (valueBindings state))))))))
 
