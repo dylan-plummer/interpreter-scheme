@@ -52,7 +52,7 @@
 (define names
   car)
 (define vals
-  cdr)
+  cadr)
 
 ;addToState takes a variable and data and adds it to a state
 (define addToState
@@ -68,7 +68,7 @@
     (cond
       ((null? state) stateEmpty)
       ;((null? (cdr state)) null)
-      ((eq? var (caar state)) (cadr state))
+      ((eq? var (caar state)) (caadr state))
       (else (searchVar var (list (cdr (name state)) (cdr (vals state))))))))
 
 ;removeVar takes a var and removes it and returns the new state
