@@ -10,7 +10,7 @@
 (define run
   (lambda (parsetree state)
     (if (null? parsetree)
-      (searchVar 'return state)
+      (searchState 'return state)
       (run (cdr parsetree) (stateGlobal (car parsetree) state)))))
 
 ;stateGlobal takes a statement and a state and returns the new state after
@@ -34,9 +34,11 @@
 (define whileBody
   caddr)
 
+;stateReturn takes an expression and a state and adds the value of the expression
+;to the state as the variable 'return
 (define stateReturn
   (lambda (expression state)
-    (addToState 'return (value expression) (removeVar 'return state))))
+    (addToState 'return (value expression) (removeFromState 'return state))))
 
 ;value takes an expression and returns it's value
 (define value
@@ -45,13 +47,13 @@
       ((number? expression) expression)
       (else expression))))
 
-
+;initial state, no variables declared or assigned
 (define stateEmpty
   '(() ()))
 
-(define names
+(define nameBindings
   car)
-(define vals
+(define valueBindings
   cadr)
 
 ;addToState takes a variable and data and adds it to a state
@@ -59,25 +61,25 @@
   (lambda (var data state)
     (if (null? state)
       (list (list var) (list data))
-      (list (cons var (names state)) (cons data (vals state))))))
+      (list (cons var (nameBindings state)) (cons data (valueBindings state))))))
 
-;searchVar takes a var and a state and returns associated data
-(define searchVar
+;searchState takes a var and a state and returns associated data
+(define searchState
   (lambda (var state)
     (display state) (newline)
     (cond
       ((null? state) stateEmpty)
       ;((null? (cdr state)) null)
       ((eq? var (caar state)) (caadr state))
-      (else (searchVar var (list (cdr (name state)) (cdr (vals state))))))))
+      (else (searchState var (list (cdr (name state)) (cdr (valueBindings state))))))))
 
-;removeVar takes a var and removes it and returns the new state
+;removeFromState takes a var and removes it and returns the new state
 ;We should abstract some of the repetitive cars and cdrs
-(define removeVar
+(define removeFromState
   (lambda (var state)
     (cond
       ((null? var) state) ;null var, return given state
       ((null? state) stateEmpty) ;null state, return stateEmpty
-      ((or (null? (names state)) (null? (vals state))) stateEmpty)
+      ((or (null? (nameBindings state)) (null? (valueBindings state))) stateEmpty)
       ((eq? var (car (car state))) (cons (cadr (car state)) (cadr (cadr state)))) ;var match, return everything else
-      (else (cons (cons (cdr (car state)) (cdr (cadr state))) (removeVar var (cons (cdr (car state)) (cdr (cadr state)))))))))
+      (else (cons (cons (cdr (car state)) (cdr (cadr state))) (removeFromState var (cons (cdr (car state)) (cdr (cadr state)))))))))
