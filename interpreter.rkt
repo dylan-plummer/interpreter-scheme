@@ -19,7 +19,7 @@
   (lambda (statement state)
     (cond
       ((eq? (car statement) 'while) (stateWhile (whileConditon statement) (whilebody statement) state))
-      ((eq? (car statement) 'return) (stateReturn (cadr statement)))
+      ((eq? (car statement) 'return) (value (cadr statement)))
       (else (error "Incorrect syntax")))))
 
 ;stateWhile takes a while loop condition, a loop body statement, and a stateEmpty
@@ -34,10 +34,7 @@
 (define whileBody
   caddr)
 
-(define stateReturn
-  (lambda (expression)
-    (value expression)))
-
+;value takes an expression and returns it's value
 (define value
   (lambda (expression)
     (cond
