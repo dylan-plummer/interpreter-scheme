@@ -5,13 +5,13 @@
 ;the proper value
 (define interpret
   (lambda (filename)
-    (parser filename)))
+    (run (parser filename) stateEmpty)))
 
-(define evaulate
+(define run
   (lambda (parsetree state)
     (if (null? parsetree)
       state
-      (evaluate (cdr parsetree) (stateGlobal (car lis) state)))))
+      (run (cdr parsetree) (stateGlobal (car parsetree) state)))))
 
 ;stateGlobal takes a statement and a state and returns the new state after
 ;evaluating the statement
@@ -19,6 +19,8 @@
   (lambda (statement state)
     (cond
       ((eq? (car statement) 'while) (stateWhile (whileConditon statement) (whilebody statement) state))
+      ((eq? (car statement) 'return) (stateReturn (cadr statement)))
+      (else (error "Incorrect syntax")))))
 
 ;stateWhile takes a while loop condition, a loop body statement, and a stateEmpty
 ;and returns the
@@ -32,9 +34,19 @@
 (define whileBody
   caddr)
 
+(define stateReturn
+  (lambda (expression)
+    (value expression)))
+
+(define value
+  (lambda (expression)
+    (cond
+      ((number? expression) expression)
+      (else expression))))
+
 
 (define stateEmpty
-  ('('() '())))
+  '(() ()))
 
 ;addToState takes a variable and data and adds it to a state
 (define addToState
