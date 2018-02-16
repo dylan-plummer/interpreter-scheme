@@ -29,6 +29,7 @@
     (if (stateBoolean condition)
       (stateGlobal body state)
       state)))
+;while helpers
 (define whileConditon
   cadr)
 (define whileBody
@@ -42,10 +43,24 @@
 
 ;value takes an expression and returns it's value
 (define value
-  (lambda (expression)
+  (lambda (exp)
     (cond
-      ((number? expression) expression)
-      (else expression))))
+      ((null? exp) '())
+      ((not (list? exp)) exp)
+      ((number? (operator exp)) error)
+      ((eq? '+ (operator exp)) (+ (value (operand1 exp)) (value (operand2 exp))))
+      ((eq? '- (operator exp)) (- (value (operand1 exp)) (value (operand2 exp))))
+      ((eq? '* (operator exp)) (* (value (operand1 exp)) (value (operand2 exp))))
+      ((eq? '/ (operator exp)) (quotient (value (operand1 exp)) (value (operand2 exp))))
+      ((eq? '% (operator exp)) (remainder (value (operand1 exp)) (value (operand2 exp))))
+      (else (error "Unknown Operator")))))
+;value helpers
+(define operator
+  car)
+(define operand1
+  cadr)
+(define operand2
+  caddr)
 
 ;initial state, no variables declared or assigned
 (define stateEmpty
@@ -66,7 +81,6 @@
 ;searchState takes a var and a state and returns associated data
 (define searchState
   (lambda (var state)
-    (display state) (newline)
     (cond
       ((null? state) stateEmpty)
       ;((null? (cdr state)) null)
