@@ -19,8 +19,21 @@
   (lambda (statement state)
     (cond
       ((eq? (car statement) 'while) (stateWhile (whileConditon statement) (whilebody statement) state))
+      ((eq? (car statement) 'var) (stateDeclare (cdr statement) state))
       ((eq? (car statement) 'return) (stateReturn (cadr statement) state))
       (else (error "Incorrect syntax")))))
+;stateDeclare takes a statement containing a variable and possibly an assignment
+;and returns the new state with the variable declared
+(define stateDeclare
+  (lambda (statement state)
+    (cond
+      ((null? statement) state)
+      ((null? (cdr statement)) (addToState (car statement) null (removeFromState (car statement) state)))
+      ((eq? (cadr statement) '=) (addToState (car statement) (value (assignmentExp statement)) (removeFromState (car statement) state)))
+      (else (error "Invalid Declaration")))))
+;declare helpers
+(define assignmentExp
+  caddr)
 
 ;stateWhile takes a while loop condition, a loop body statement, and a stateEmpty
 ;and returns the
@@ -67,8 +80,10 @@
 (define stateEmpty
   '(() ()))
 
+;bindings to the names of variables in the state
 (define nameBindings
   car)
+;bindings to the values of variables in the state
 (define valueBindings
   cadr)
 
@@ -94,6 +109,6 @@
     (cond
       ((null? var) state) ;null var, return given state
       ((null? state) stateEmpty) ;null state, return stateEmpty
-      ((or (null? (nameBindings state)) (null? (valueBindings state))) stateEmpty)
-      ((eq? var (car (car state))) (cons (cadr (car state)) (cadr (cadr state)))) ;var match, return everything else
-      (else (cons (cons (cdr (car state)) (cdr (cadr state))) (removeFromState var (cons (cdr (car state)) (cdr (cadr state)))))))))
+      ((or (null? (nameBindings state)) (null? (valueBindings state))) stateEmpty) ;null names or values
+      ((eq? var (car (nameBindings state))) (cons (cdr (nameBindings state)) (cdr (valueBindings state)))) ;var match, return everything else
+      (else (cons (cons (car (nameBindings state)) (car (valueBindings state))) (removeFromState var (cons (cdr (nameBindings state)) (cdr (valueBindings state))))))))) ;cons current to recurse into rest of list
