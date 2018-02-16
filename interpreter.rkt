@@ -10,7 +10,7 @@
 (define run
   (lambda (parsetree state)
     (if (null? parsetree)
-      (searchState 'return state)
+      (mathValue (searchState 'return state) state)
       (run (cdr parsetree) (stateGlobal (car parsetree) state)))))
 
 ;stateGlobal takes a statement and a state and returns the new state after
@@ -22,6 +22,7 @@
       ((eq? (car statement) 'var) (stateDeclare (cdr statement) state))
       ((eq? (car statement) 'return) (stateReturn (cadr statement) state))
       (else (error "Incorrect syntax")))))
+
 ;stateDeclare takes a statement containing a variable and possibly an assignment
 ;and returns the new state with the variable declared
 (define stateDeclare
@@ -29,46 +30,62 @@
     (cond
       ((null? statement) state)
       ((null? (cdr statement)) (addToState (car statement) null (removeFromState (car statement) state)))
-      ((eq? (cadr statement) '=) (addToState (car statement) (value (assignmentExp statement)) (removeFromState (car statement) state)))
-      (else (error "Invalid Declaration")))))
+      (else (addToState (car statement) (mathValue (assignmentExp statement) state) (removeFromState (car statement) state))))))
 ;declare helpers
 (define assignmentExp
-  caddr)
+  cadr)
+
 
 ;stateWhile takes a while loop condition, a loop body statement, and a stateEmpty
 ;and returns the
 (define stateWhile
   (lambda (condition body state)
-    (if (stateBoolean condition)
+    (if (mathBoolean condition)
       (stateGlobal body state)
       state)))
-;while helpers
-(define whileConditon
-  cadr)
-(define whileBody
-  caddr)
 
-;stateReturn takes an expression and a state and adds the value of the expression
+;while helpers
+(define whileConditon cadr)
+
+(define whileBody caddr)
+
+;mathBoolean evaluates a T/F condition, right left and eqSym should be set to null on call
+(define mathBoolean
+  (lambda (condition)
+    (cond
+      ((null? condition) #f)
+      ((null? (cadddr condition) (boolEvaluateEquality condition)) ;if no 4th element, we should have some x == y to evaluate
+      ;else, we have to mathValue the left and right sides, MUST eval left before right
+
+
+
+;mathBoolean helpers
+
+
+
+;stateReturn takes an expression and a state and adds the valuevalue of the expression
 ;to the state as the variable 'return
 (define stateReturn
   (lambda (expression state)
-    (addToState 'return (value expression) (removeFromState 'return state))))
+    (addToState 'return (mathValue expression state) (removeFromState 'return state))))
 
-;value takes an expression and returns it's value
-(define value
-  (lambda (exp)
+;value takes an expression and returns it's mathematical value
+(define mathValue
+  (lambda (exp state)
     (cond
       ((null? exp) '())
-      ((not (list? exp)) exp)
-      ((number? (operator exp)) error)
-      ((null? (cddr exp)) (- 0 (value (operand1 exp))))
-      ((eq? '+ (operator exp)) (+ (value (operand1 exp)) (value (operand2 exp))))
-      ((eq? '- (operator exp)) (- (value (operand1 exp)) (value (operand2 exp))))
-      ((eq? '* (operator exp)) (* (value (operand1 exp)) (value (operand2 exp))))
-      ((eq? '/ (operator exp)) (quotient (value (operand1 exp)) (value (operand2 exp))))
-      ((eq? '% (operator exp)) (remainder (value (operand1 exp)) (value (operand2 exp))))
+      ((number? exp) exp)
+      ((not (list? exp)) (searchState exp state))
+      ((number? (operator exp)) exp)
+      ((null? (cddr exp)) (- 0 (mathValue (operand1 exp) state)))
+      ((eq? '+ (operator exp)) (+ (mathValue (operand1 exp) state) (mathValue (operand2 exp) state)))
+      ((eq? '- (operator exp)) (- (mathValue (operand1 exp) state) (mathValue (operand2 exp) state)))
+      ((eq? '* (operator exp)) (* (mathValue (operand1 exp) state) (mathValue (operand2 exp) state)))
+      ((eq? '/ (operator exp)) (quotient (mathValue (operand1 exp) state) (mathValue (operand2 exp) state)))
+      ((eq? '% (operator exp)) (remainder (mathValue (operand1 exp) state) (mathValue (operand2 exp) state)))
       (else (error "Unknown Operator")))))
-;value helpers
+
+;value helper
 (define operator
   car)
 (define operand1
@@ -100,7 +117,7 @@
     (cond
       ((null? state) stateEmpty)
       ((eq? var (caar state)) (caadr state))
-      (else (searchState var (list (cdr (name state)) (cdr (valueBindings state))))))))
+      (else (searchState var (list (cdr (nameBindings state)) (cdr (valueBindings state))))))))
 
 ;removeFromState takes a var and removes it and returns the new state
 ;We should abstract some of the repetitive cars and cdrs
@@ -111,4 +128,5 @@
       ((null? state) stateEmpty) ;null state, return stateEmpty
       ((or (null? (nameBindings state)) (null? (valueBindings state))) stateEmpty) ;null names or values
       ((eq? var (car (nameBindings state))) (cons (cdr (nameBindings state)) (cdr (valueBindings state)))) ;var match, return everything else
-      (else (cons (cons (car (nameBindings state)) (car (valueBindings state))) (removeFromState var (cons (cdr (nameBindings state)) (cdr (valueBindings state))))))))) ;cons current to recurse into rest of list
+      (else (list (cons (car (nameBindings state)) (car (removeFromState var (list (cdr (nameBindings state)) (cdr (valueBindings state)))))) (cons (car (valueBindings state)) (cadr (removeFromState var (list (cdr (nameBindings state)) (cdr (valueBindings state)))))))))))
+      ;(else (cons (cons (car (nameBindings state)) (car (valueBindings state))) (removeFromState var (cons (cdr (nameBindings state)) (cdr (valueBindings state))))))))) ;cons current to recurse into rest of list
