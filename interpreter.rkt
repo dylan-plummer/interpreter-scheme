@@ -49,18 +49,15 @@
 
 (define whileBody caddr)
 
-;mathBoolean evaluates a T/F condition, right left and eqSym should be set to null on call
-(define mathBoolean
-  (lambda (condition)
-    (cond
-      ((null? condition) #f)
-      ((null? (cadddr condition) (boolEvaluateEquality condition)) ;if no 4th element, we should have some x == y to evaluate
-      ;else, we have to mathValue the left and right sides, MUST eval left before right
-
-
-
 ;mathBoolean helpers
-
+(define boolEvalLR ;returns the right side of a statement with an equality
+  (lambda (stmt acc state)
+    (cond
+      ((null? stmt) '())
+      ((not (or (eq? (car stmt) '==) (eq? (car stmt) '!=) (eq? (car stmt) '<) (eq? (car stmt) '>) (eq? (car stmt) '<=) (eq? (car stmt) '>=))) (boolEvalLR (cdr stmt) (append acc (list (car stmt))) state))
+      (else (cons (mathValue acc state) (cons (car stmt) (mathValue (cdr stmt) state))))
+     )
+))
 
 
 ;stateReturn takes an expression and a state and adds the valuevalue of the expression
@@ -74,10 +71,10 @@
   (lambda (exp state)
     (cond
       ((null? exp) '())
-      ((number? exp) exp)
-      ((not (list? exp)) (searchState exp state))
-      ((number? (operator exp)) exp)
-      ((null? (cddr exp)) (- 0 (mathValue (operand1 exp) state)))
+      ((number? exp) exp) ;no futher recursion needed, return number value
+      ((not (list? exp)) (searchState exp state)) ;not  number, yet not a list...must be a variable!
+      ((number? (operator exp)) (error "Invalid expression")) ;the expression has no operator :(
+      ((null? (cddr exp)) (- 0 (mathValue (operand1 exp) state))) ;unary negation
       ((eq? '+ (operator exp)) (+ (mathValue (operand1 exp) state) (mathValue (operand2 exp) state)))
       ((eq? '- (operator exp)) (- (mathValue (operand1 exp) state) (mathValue (operand2 exp) state)))
       ((eq? '* (operator exp)) (* (mathValue (operand1 exp) state) (mathValue (operand2 exp) state)))
