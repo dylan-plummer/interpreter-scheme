@@ -64,15 +64,17 @@
       ((number? exp) exp) ;no futher recursion needed, return number value
       ((not (list? exp)) (searchState exp state)) ;not  number, yet not a list...must be a variable!
       ((number? (operator exp)) (error "Invalid expression")) ;the expression has no operator :(
-      ;and/or/not evaluation
-
+      ;&&/||/! evaluation, needs to be in format (operator bool bool) else bad logic
+      ((eq? '&& (operator exp)) (and (mathValue (operand1 exp) state) (mathValue (operand2 exp) state)))
+      ((eq? '|| (operator exp)) (or (mathValue (operand1 exp) state) (mathValue (operand2 exp) state)))
+      ((eq? '!  (operator exp)) (and (not (mathValue (operand1 exp) state)) (not (mathValue (operand2 exp) state)))) ;Here I'm implementing ! as (and (not cond1) (not cond2))
       ;boolean evaluation
-      ((eq? (car exp) '==) (= (mathValue (cadr exp) state) (mathValue (caddr exp) state)))
-      ((eq? (car exp) '!=) (not (= (mathValue (cadr exp) state) (mathValue (caddr exp) state))))
-      ((eq? (car exp) '<=) (>= (mathValue (cadr exp) state) (mathValue (caddr exp) state)))
-      ((eq? (car exp) '>=) (>= (mathValue (cadr exp) state) (mathValue (caddr exp) state)))
-      ((eq? (car exp) '<) (< (mathValue (cadr exp) state) (mathValue (caddr exp) state)))
-      ((eq? (car exp) '>) (> (mathValue (cadr exp) state) (mathValue (caddr exp) state)))
+      ((eq? '== (operator exp)) (= (mathValue (operand1 exp) state) (mathValue (operand2 exp) state)))
+      ((eq? '!= (operator exp)) (not (= (mathValue (operand1 exp) state) (mathValue (operand2 exp) state))))
+      ((eq? '<= (operator exp)) (>= (mathValue (operand1 exp) state) (mathValue (operand2 exp) state)))
+      ((eq? '>= (operator exp)) (>= (mathValue (operand1 exp) state) (mathValue (operand2 exp) state)))
+      ((eq? '<  (operator exp))  (< (mathValue (operand1 exp) state) (mathValue (operand2 exp) state)))
+      ((eq? '>  (operator exp))  (> (mathValue (operand exp) state) (mathValue (operand2 exp) state)))
       ;math evaluation
       ((null? (cddr exp)) (- 0 (mathValue (operand1 exp) state))) ;unary negation
       ((eq? '+ (operator exp)) (+ (mathValue (operand1 exp) state) (mathValue (operand2 exp) state)))
