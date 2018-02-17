@@ -48,48 +48,32 @@
 
 (define whileBody caddr)
 
-;mathBoolean
-(define mathBoolean ;takes a condition, returns a #t/#f
-  (lambda (condition state)
-    (if (or (null? condition) (null? state))
-        '()
-        (conditionBoolEval (conditionMathEvalLR condition '() state)))))
-
-
-;mathBoolean helpers
-(define conditionMathEvalINFIX
-  (lambda (stmt state)
-    ((null? stmt) stmt)
-    (conditionBoolEval (cons (car stmt) (mathValue (cdr stmt))))))
-
-(define conditionBoolEval ;takes a fully evaluated infix condition statement
-  (lambda (stmt)
-    (cond
-      ((null? stmt) #f)
-      ((eq? (car stmt) '==) (= (cadr stmt) (caddr stmt)))
-      ((eq? (car stmt) '!=) (not (= (cadr stmt) (caddr stmt))))
-      ((eq? (car stmt) '<=) (or (> (cadr stmt) (caddr stmt)) (= (cadr stmt) (caddr stmt))))
-      ((eq? (car stmt) '>=) (or (> (cadr stmt) (caddr stmt)) (= (cadr stmt) (caddr stmt))))
-      ((eq? (car stmt) '<) (< (cadr stmt) (caddr stmt)))
-      ((eq? (car stmt) '>) (> (cadr stmt) (caddr stmt)))
-    )
-))
-
 ;stateReturn takes an expression and a state and adds the value of the expression
 ;to the state as the variable 'return
 (define stateReturn
   (lambda (expression state)
     (mathValue expression state)))
 
-;value takes an expression and returns it's mathematical value
+;value takes an expression and returns it's mathematical or boolean value
 (define mathValue
   (lambda (exp state)
-    ;(display exp) (newline)
+    (display exp) (newline)
     (cond
+      ;null/error checks
       ((null? exp) exp)
       ((number? exp) exp) ;no futher recursion needed, return number value
       ((not (list? exp)) (searchState exp state)) ;not  number, yet not a list...must be a variable!
       ((number? (operator exp)) (error "Invalid expression")) ;the expression has no operator :(
+      ;and/or/not evaluation
+
+      ;boolean evaluation
+      ((eq? (car exp) '==) (= (mathValue (cadr exp) state) (mathValue (caddr exp) state)))
+      ((eq? (car exp) '!=) (not (= (mathValue (cadr exp) state) (mathValue (caddr exp) state))))
+      ((eq? (car exp) '<=) (>= (mathValue (cadr exp) state) (mathValue (caddr exp) state)))
+      ((eq? (car exp) '>=) (>= (mathValue (cadr exp) state) (mathValue (caddr exp) state)))
+      ((eq? (car exp) '<) (< (mathValue (cadr exp) state) (mathValue (caddr exp) state)))
+      ((eq? (car exp) '>) (> (mathValue (cadr exp) state) (mathValue (caddr exp) state)))
+      ;math evaluation
       ((null? (cddr exp)) (- 0 (mathValue (operand1 exp) state))) ;unary negation
       ((eq? '+ (operator exp)) (+ (mathValue (operand1 exp) state) (mathValue (operand2 exp) state)))
       ((eq? '- (operator exp)) (- (mathValue (operand1 exp) state) (mathValue (operand2 exp) state)))
