@@ -9,8 +9,9 @@
 
 (define run
   (lambda (parsetree state)
+    ;(display state) (newline)
     (if (null? parsetree)
-      (mathValue (searchState 'return state) state)
+      state
       (run (cdr parsetree) (stateGlobal (car parsetree) state)))))
 
 ;stateGlobal takes a statement and a state and returns the new state after
@@ -74,17 +75,18 @@
     )
 ))
 
-;stateReturn takes an expression and a state and adds the valuevalue of the expression
+;stateReturn takes an expression and a state and adds the value of the expression
 ;to the state as the variable 'return
 (define stateReturn
   (lambda (expression state)
-    (addToState 'return (mathValue expression state) (removeFromState 'return state))))
+    (mathValue expression state)))
 
 ;value takes an expression and returns it's mathematical value
 (define mathValue
   (lambda (exp state)
+    ;(display exp) (newline)
     (cond
-      ((null? exp) '())
+      ((null? exp) exp)
       ((number? exp) exp) ;no futher recursion needed, return number value
       ((not (list? exp)) (searchState exp state)) ;not  number, yet not a list...must be a variable!
       ((number? (operator exp)) (error "Invalid expression")) ;the expression has no operator :(
@@ -125,6 +127,8 @@
 ;searchState takes a var and a state and returns associated data
 (define searchState
   (lambda (var state)
+    (display var) (newline)
+    (display state) (newline)
     (cond
       ((null? state) stateEmpty)
       ((eq? var (caar state)) (caadr state))
@@ -136,8 +140,8 @@
   (lambda (var state)
     (cond
       ((null? var) state) ;null var, return given state
-      ((null? state) stateEmpty) ;null state, return stateEmpty
-      ((or (null? (nameBindings state)) (null? (valueBindings state))) stateEmpty) ;null names or values
+      ((null? state) state) ;null state, return stateEmpty
+      ((or (null? (nameBindings state)) (null? (valueBindings state))) state) ;null names or values
       ((eq? var (car (nameBindings state))) (cons (cdr (nameBindings state)) (cdr (valueBindings state)))) ;var match, return everything else
       (else (list (cons (car (nameBindings state)) (car (removeFromState var (list (cdr (nameBindings state)) (cdr (valueBindings state)))))) (cons (car (valueBindings state)) (cadr (removeFromState var (list (cdr (nameBindings state)) (cdr (valueBindings state)))))))))))
       ;(else (cons (cons (car (nameBindings state)) (car (valueBindings state))) (removeFromState var (cons (cdr (nameBindings state)) (cdr (valueBindings state))))))))) ;cons current to recurse into rest of list

@@ -1,1 +1,3 @@
-return 1 * 2 + 1 == 3;
+var ayye = 3;
+var x = 5;
+return x * ayye + 6 % ayye;
