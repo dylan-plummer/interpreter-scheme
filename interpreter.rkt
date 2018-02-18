@@ -20,12 +20,28 @@
   (lambda (statement state)
     (display statement) (newline)
     (cond
+      ((eq? (car statement) 'return) (stateReturn (cadr statement) state))
       ((eq? (car statement) 'while) (stateWhile (whileConditon statement) (whileBody statement) state))
       ((eq? (car statement) 'var) (stateDeclare (cdr statement) state))
-      ((eq? (car statement) 'return) (stateReturn (cadr statement) state))
       ((eq? (car statement) '=) (stateAssign (cdr statement)  state))
+      ((eq? (car statement) 'if) (stateIf (ifCondition statement) (thenStatement statement) (elseStatement statement) state))
       (else (error "Incorrect syntax")))))
 
+(define stateIf
+  (lambda (condition statement else state)
+    (if (mathValue condition state)
+        (stateGlobal statement state)
+        (stateGlobal else state))))
+;if helpers
+(define ifCondition cadr)
+(define thenStatement caddr)
+(define elseStatement
+  (lambda (statement)
+    (if (null? (cdddr statement))
+        '()
+        (cadddr statement))))
+
+  
 ;stateDeclare takes a statement containing a variable and possibly an assignment
 ;and returns the new state with the variable declared
 (define stateDeclare

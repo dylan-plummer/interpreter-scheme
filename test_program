@@ -1,4 +1,6 @@
-var i = 0;
-while (i < 100)
-	i = i + 1;
-return i;
+if (1 == 2)
+	return 2;
+else if (1 == 2)
+	return 6;
+else
+	return 8;
