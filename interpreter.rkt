@@ -7,12 +7,17 @@
   (lambda (filename)
     (run (parser filename) stateEmpty)))
 
+;run evaluates the current parsetree statement and recursively runs the
+;next line, returning the new state
 (define run
   (lambda (parsetree state)
-    ;(display state) (newline)
+    ;(display parsetree) (newline)
     (if (null? parsetree)
       state
-      (run (cdr parsetree) (stateGlobal (car parsetree) state)))))
+      (run (nextLines parsetree) (stateGlobal (currentLine parsetree) state)))))
+;run helpers
+(define nextLines cdr)
+(define currentLine car)
 
 ;stateGlobal takes a statement and a state and returns the new state after
 ;evaluating the statement
@@ -20,13 +25,21 @@
   (lambda (statement state)
     ;(display state) (newline)
     (cond
-      ((eq? (car statement) 'return) (stateReturn (cadr statement) state))
-      ((eq? (car statement) 'while) (stateWhile (whileConditon statement) (whileBody statement) state))
-      ((eq? (car statement) 'var) (stateDeclare (cdr statement) state))
-      ((eq? (car statement) '=) (stateAssign (cdr statement)  state))
-      ((eq? (car statement) 'if) (stateIf (ifCondition statement) (thenStatement statement) (elseStatement statement) state))
+      ((eq? (langValue statement) 'return) (stateReturn (returnExp statement) state))
+      ((eq? (langValue statement) 'while) (stateWhile (whileConditon statement) (whileBody statement) state))
+      ((eq? (langValue statement) 'var) (stateDeclare (declareExp statement) state))
+      ((eq? (langValue statement) '=) (stateAssign (assignExp statement)  state))
+      ((eq? (langValue statement) 'if) (stateIf (ifCondition statement) (thenStatement statement) (elseStatement statement) state))
       (else (error "Incorrect syntax")))))
+;global helpers
+(define langValue car)
+(define declareExp cdr)
+(define returnExp cadr)
+(define assignExp cdr)
 
+;stateIf takes a condition, an if statement, an else statement, and a state
+;and returns the new state after evaluating either of the statements depending on
+;the condition
 (define stateIf
   (lambda (condition statement else state)
     (if (mathValue condition state)
@@ -48,8 +61,10 @@
   (lambda (statement state)
     (cond
       ((null? statement) state)
-      ((null? (cdr statement)) (addToState (variable statement) null (removeFromState (variable statement) state)))
+      ((null? (declareExp statement)) (addToState (variable statement) 'unassigned (removeFromState (variable statement) state)))
       (else (addToState (variable statement) (mathValue (assignmentExp statement) state) (removeFromState (variable statement) state))))))
+;declare helpers
+
 
 ;stateAssign takes a statement containing a variable and an expression and returns
 ;the new state with the variable assigned the value of the expression
@@ -69,7 +84,7 @@
 ;and returns the new state after the loop is executed
 (define stateWhile
   (lambda (condition body state)
-    ;(display state) (newline)
+    (display state) (newline)
     (if (mathValue condition state)
       (stateWhile condition body (stateGlobal body state))
       state)))
@@ -87,7 +102,7 @@
 ;value takes an expression and returns it's mathematical or boolean value
 (define mathValue
   (lambda (exp state)
-    (display exp) (newline)
+    ;(display exp) (newline)
     (cond
       ;null/error checks
       ((null? exp) exp)

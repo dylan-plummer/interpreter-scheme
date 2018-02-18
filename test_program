@@ -1,8 +1,13 @@
-var x = 10;
-var y = 20;
-var z = 20 >= 10;
-if (!z || false)
-  z = !z;
-else
-  z = z;
-return z;
+var i = 0;
+var j = 0;
+var count = 0;
+var z;
+while (i < 100)
+	i = i + 1;
+	while (j < 100)
+		if ((j % 2) == 0)
+			j = j + 1;
+		else
+			j = j * 2;
+z = i + j;
+return j * z;
