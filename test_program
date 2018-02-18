@@ -1,3 +1,5 @@
-var ayye = 3;
-var x = 5;
-return x * ayye + 6 % ayye;
+var x = 10;
+var y = 2;
+x = 5;
+y = x * y;
+return y;

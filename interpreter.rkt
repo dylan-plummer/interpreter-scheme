@@ -18,10 +18,12 @@
 ;evaluating the statement
 (define stateGlobal
   (lambda (statement state)
+    (display statement) (newline)
     (cond
       ((eq? (car statement) 'while) (stateWhile (whileConditon statement) (whilebody statement) state))
       ((eq? (car statement) 'var) (stateDeclare (cdr statement) state))
       ((eq? (car statement) 'return) (stateReturn (cadr statement) state))
+      ((eq? (car statement) '=) (stateAssign (cdr statement)  state))
       (else (error "Incorrect syntax")))))
 
 ;stateDeclare takes a statement containing a variable and possibly an assignment
@@ -30,11 +32,22 @@
   (lambda (statement state)
     (cond
       ((null? statement) state)
-      ((null? (cdr statement)) (addToState (car statement) null (removeFromState (car statement) state)))
-      (else (addToState (car statement) (mathValue (assignmentExp statement) state) (removeFromState (car statement) state))))))
-;declare helpers
+      ((null? (cdr statement)) (addToState (variable statement) null (removeFromState (variable statement) state)))
+      (else (addToState (variable statement) (mathValue (assignmentExp statement) state) (removeFromState (variable statement) state))))))
+
+;stateAssign takes a statement containing a variable and an expression and returns
+;the new state with the variable assigned the value of the expression
+(define stateAssign
+  (lambda (statement state)
+    ;(display statement) (newline)
+    (cond
+      ((null? statement) state)
+      (else (addToState (variable statement) (mathValue (assignmentExp statement) state) (removeFromState (variable statement) state))))))
+;assignment helpers
 (define assignmentExp
   cadr)
+(define variable
+  car)
 
 ;stateWhile takes a while loop condition, a loop body statement, and a stateEmpty
 ;and returns the
@@ -57,7 +70,6 @@
 ;value takes an expression and returns it's mathematical or boolean value
 (define mathValue
   (lambda (exp state)
-    (display exp) (newline)
     (cond
       ;null/error checks
       ((null? exp) exp)
@@ -83,7 +95,6 @@
       ((eq? '/ (operator exp)) (quotient (mathValue (operand1 exp) state) (mathValue (operand2 exp) state)))
       ((eq? '% (operator exp)) (remainder (mathValue (operand1 exp) state) (mathValue (operand2 exp) state)))
       (else (error "Unknown Operator")))))
-
 ;value helper
 (define operator
   car)
@@ -91,6 +102,11 @@
   cadr)
 (define operand2
   caddr)
+(define boolValue
+  (lambda (bool)
+    (if bool
+        'true
+        'false)))
 
 ;initial state, no variables declared or assigned
 (define stateEmpty
@@ -113,8 +129,6 @@
 ;searchState takes a var and a state and returns associated data
 (define searchState
   (lambda (var state)
-    (display var) (newline)
-    (display state) (newline)
     (cond
       ((null? state) stateEmpty)
       ((eq? var (caar state)) (caadr state))
@@ -124,10 +138,14 @@
 ;We should abstract some of the repetitive cars and cdrs
 (define removeFromState
   (lambda (var state)
+    ;(display state) (newline)
     (cond
       ((null? var) state) ;null var, return given state
       ((null? state) state) ;null state, return stateEmpty
       ((or (null? (nameBindings state)) (null? (valueBindings state))) state) ;null names or values
-      ((eq? var (car (nameBindings state))) (cons (cdr (nameBindings state)) (cdr (valueBindings state)))) ;var match, return everything else
+      ((eq? var (car (nameBindings state))) (list (cdr (nameBindings state)) (cdr (valueBindings state)))) ;var match, return everything else
       (else (list (cons (car (nameBindings state)) (car (removeFromState var (list (cdr (nameBindings state)) (cdr (valueBindings state)))))) (cons (car (valueBindings state)) (cadr (removeFromState var (list (cdr (nameBindings state)) (cdr (valueBindings state)))))))))))
       ;(else (cons (cons (car (nameBindings state)) (car (valueBindings state))) (removeFromState var (cons (cdr (nameBindings state)) (cdr (valueBindings state))))))))) ;cons current to recurse into rest of list
+(define nextVariable
+  (lambda (state)
+    (list (cdr (nameBindings state)) (cdr (valueBindings)))))
