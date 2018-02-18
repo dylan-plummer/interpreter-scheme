@@ -1,6 +1,8 @@
-if (1 == 2)
-	return 2;
-else if (1 == 2)
-	return 6;
+var x = 10;
+var y = 20;
+var z = 20 >= 10;
+if (!z || false)
+  z = !z;
 else
-	return 8;
+  z = z;
+return z;

@@ -18,7 +18,7 @@
 ;evaluating the statement
 (define stateGlobal
   (lambda (statement state)
-    (display statement) (newline)
+    ;(display state) (newline)
     (cond
       ((eq? (car statement) 'return) (stateReturn (cadr statement) state))
       ((eq? (car statement) 'while) (stateWhile (whileConditon statement) (whileBody statement) state))
@@ -69,7 +69,7 @@
 ;and returns the new state after the loop is executed
 (define stateWhile
   (lambda (condition body state)
-    (display state) (newline)
+    ;(display state) (newline)
     (if (mathValue condition state)
       (stateWhile condition body (stateGlobal body state))
       state)))
@@ -87,25 +87,28 @@
 ;value takes an expression and returns it's mathematical or boolean value
 (define mathValue
   (lambda (exp state)
+    (display exp) (newline)
     (cond
       ;null/error checks
       ((null? exp) exp)
       ((number? exp) exp) ;no futher recursion needed, return number value
+      ((eq? exp 'true) #t)
+      ((eq? exp 'false) #f)
       ((not (list? exp)) (searchState exp state)) ;not  number, yet not a list...must be a variable!
       ((number? (operator exp)) (error "Invalid expression")) ;the expression has no operator :(
       ;&&/||/! evaluation, needs to be in format (operator bool bool) else bad logic
       ((eq? '&& (operator exp)) (and (mathValue (operand1 exp) state) (mathValue (operand2 exp) state)))
       ((eq? '|| (operator exp)) (or (mathValue (operand1 exp) state) (mathValue (operand2 exp) state)))
-      ((eq? '!  (operator exp)) (and (not (mathValue (operand1 exp) state)) (not (mathValue (operand2 exp) state)))) ;Here I'm implementing ! as (and (not cond1) (not cond2))
+      ((eq? (operator exp) '!) (not (mathValue (operand1 exp) state))) ;negation
       ;boolean evaluation
       ((eq? '== (operator exp)) (= (mathValue (operand1 exp) state) (mathValue (operand2 exp) state)))
       ((eq? '!= (operator exp)) (not (= (mathValue (operand1 exp) state) (mathValue (operand2 exp) state))))
       ((eq? '<= (operator exp)) (>= (mathValue (operand1 exp) state) (mathValue (operand2 exp) state)))
       ((eq? '>= (operator exp)) (>= (mathValue (operand1 exp) state) (mathValue (operand2 exp) state)))
       ((eq? '<  (operator exp))  (< (mathValue (operand1 exp) state) (mathValue (operand2 exp) state)))
-      ((eq? '>  (operator exp))  (> (mathValue (operand exp) state) (mathValue (operand2 exp) state)))
+      ((eq? '>  (operator exp))  (> (mathValue (operand1 exp) state) (mathValue (operand2 exp) state)))
       ;math evaluation
-      ((null? (cddr exp)) (- 0 (mathValue (operand1 exp) state))) ;unary negation
+      ((and (eq? (operator exp) '-) (null? (cddr exp))) (- 0 (mathValue (operand1 exp) state))) ;unary negation
       ((eq? '+ (operator exp)) (+ (mathValue (operand1 exp) state) (mathValue (operand2 exp) state)))
       ((eq? '- (operator exp)) (- (mathValue (operand1 exp) state) (mathValue (operand2 exp) state)))
       ((eq? '* (operator exp)) (* (mathValue (operand1 exp) state) (mathValue (operand2 exp) state)))
