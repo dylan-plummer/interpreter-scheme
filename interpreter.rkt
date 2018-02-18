@@ -96,9 +96,9 @@
 ;to the state as the variable 'return
 (define stateReturn
   (lambda (expression state)
-    (if (number? (mathValue expression state))
-        (mathValue expression state)
-        (boolValue (mathValue expression state)))))
+    (cond
+      ((number? (mathValue expression state)) (mathValue expression state))
+      (else (boolValue (mathValue expression state))))))
 
 ;value takes an expression and returns it's mathematical or boolean value
 (define mathValue
@@ -194,8 +194,7 @@
       ((null? state) state) ;null state, return stateEmpty
       ((or (null? (nameBindings state)) (null? (valueBindings state))) state) ;null names or values
       ((eq? var (car (nameBindings state))) (list (cdr (nameBindings state)) (cdr (valueBindings state)))) ;var match, return everything else
-      (else (list (cons (car (nameBindings state)) (car (removeFromState var (list (cdr (nameBindings state)) (cdr (valueBindings state)))))) (cons (car (valueBindings state)) (cadr (removeFromState var (list (cdr (nameBindings state)) (cdr (valueBindings state)))))))))))
-      ;(else (cons (cons (car (nameBindings state)) (car (valueBindings state))) (removeFromState var (cons (cdr (nameBindings state)) (cdr (valueBindings state))))))))) ;cons current to recurse into rest of list
+      (else (concatNamesAndValues (cons (car (nameBindings state)) (car (removeFromState var (nextVariable state)))) (cons (car (valueBindings state)) (cadr (removeFromState var (nextVariable state)))))))))
 (define nextVariable
   (lambda (state)
-    (list (cdr (nameBindings state)) (cdr (valueBindings)))))
+    (concatNamesAndValues (cdr (nameBindings state)) (cdr (valueBindings state)))))
