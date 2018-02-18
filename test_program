@@ -12,4 +12,4 @@ while (i < 100)
 		else
 			j = j * 2;
 z = i + j;
-return j * z;
+return i == i;

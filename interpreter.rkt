@@ -96,7 +96,9 @@
 ;to the state as the variable 'return
 (define stateReturn
   (lambda (expression state)
-    (mathValue expression state)))
+    (if (number? (mathValue expression state))
+        (mathValue expression state)
+        (boolValue (mathValue expression state)))))
 
 ;value takes an expression and returns it's mathematical or boolean value
 (define mathValue
