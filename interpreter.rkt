@@ -90,7 +90,6 @@
       state)))
 ;while helpers
 (define whileConditon cadr)
-
 (define whileBody caddr)
 
 ;stateReturn takes an expression and a state and adds the value of the expression
@@ -111,6 +110,7 @@
       ((eq? exp 'false) #f)
       ((not (list? exp)) (searchState exp state)) ;not  number, yet not a list...must be a variable!
       ((number? (operator exp)) (error "Invalid expression")) ;the expression has no operator :(
+      ((or (eq? (mathValue (operand1 exp) state) 'unassigned) (eq? (mathValue(operand2 exp) state) 'unassigned)) (error "Variable has not been assigned a value"))
       ;&&/||/! evaluation, needs to be in format (operator bool bool) else bad logic
       ((eq? '&& (operator exp)) (and (mathValue (operand1 exp) state) (mathValue (operand2 exp) state)))
       ((eq? '|| (operator exp)) (or (mathValue (operand1 exp) state) (mathValue (operand2 exp) state)))
@@ -123,14 +123,14 @@
       ((eq? '<  (operator exp))  (< (mathValue (operand1 exp) state) (mathValue (operand2 exp) state)))
       ((eq? '>  (operator exp))  (> (mathValue (operand1 exp) state) (mathValue (operand2 exp) state)))
       ;math evaluation
-      ((and (eq? (operator exp) '-) (null? (cddr exp))) (- 0 (mathValue (operand1 exp) state))) ;unary negation
+      ((and (eq? (operator exp) '-) (null? (binaryExp exp))) (- 0 (mathValue (operand1 exp) state))) ;unary negation
       ((eq? '+ (operator exp)) (+ (mathValue (operand1 exp) state) (mathValue (operand2 exp) state)))
       ((eq? '- (operator exp)) (- (mathValue (operand1 exp) state) (mathValue (operand2 exp) state)))
       ((eq? '* (operator exp)) (* (mathValue (operand1 exp) state) (mathValue (operand2 exp) state)))
       ((eq? '/ (operator exp)) (quotient (mathValue (operand1 exp) state) (mathValue (operand2 exp) state)))
       ((eq? '% (operator exp)) (remainder (mathValue (operand1 exp) state) (mathValue (operand2 exp) state)))
       (else (error "Unknown Operator")))))
-;value helper
+;mathValue helpers
 (define operator
   car)
 (define operand1
@@ -142,6 +142,7 @@
     (if bool
         'true
         'false)))
+(define binaryExp cddr)
 
 ;initial state, no variables declared or assigned
 (define stateEmpty
@@ -158,16 +159,28 @@
 (define addToState
   (lambda (var data state)
     (if (null? state)
-      (list (list var) (list data))
-      (list (cons var (nameBindings state)) (cons data (valueBindings state))))))
+      (concatNamesAndValues (list var) (list data))
+      (concatNamesAndValues (addVarName var state) (addVarValue data state)))))
+;addToState helpers
+(define addVarName
+  (lambda (var state)
+    (cons var (nameBindings state))))
+(define addVarValue
+  (lambda (data state)
+    (cons data (valueBindings state))))
+(define concatNamesAndValues list)
 
 ;searchState takes a var and a state and returns associated data
 (define searchState
   (lambda (var state)
     (cond
       ((null? state) stateEmpty)
-      ((eq? var (caar state)) (caadr state))
-      (else (searchState var (list (cdr (nameBindings state)) (cdr (valueBindings state))))))))
+      ((eq? var (currentVarName state)) (currentVarValue state))
+      (else (searchState var (concatNamesAndValues (nextVars (nameBindings state)) (nextVars (valueBindings state))))))))
+;searchState helpers
+(define nextVars cdr)
+(define currentVarName caar)
+(define currentVarValue caadr)
 
 ;removeFromState takes a var and removes it and returns the new state
 ;We should abstract some of the repetitive cars and cdrs

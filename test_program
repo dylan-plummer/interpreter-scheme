@@ -2,6 +2,8 @@ var i = 0;
 var j = 0;
 var count = 0;
 var z;
+z = 1;
+i = z + 1;
 while (i < 100)
 	i = i + 1;
 	while (j < 100)
