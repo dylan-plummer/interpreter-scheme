@@ -20,7 +20,7 @@
   (lambda (statement state)
     (display statement) (newline)
     (cond
-      ((eq? (car statement) 'while) (stateWhile (whileConditon statement) (whilebody statement) state))
+      ((eq? (car statement) 'while) (stateWhile (whileConditon statement) (whileBody statement) state))
       ((eq? (car statement) 'var) (stateDeclare (cdr statement) state))
       ((eq? (car statement) 'return) (stateReturn (cadr statement) state))
       ((eq? (car statement) '=) (stateAssign (cdr statement)  state))
@@ -49,12 +49,13 @@
 (define variable
   car)
 
-;stateWhile takes a while loop condition, a loop body statement, and a stateEmpty
-;and returns the
+;stateWhile takes a while loop condition, a loop body statement, and a state
+;and returns the new state after the loop is executed
 (define stateWhile
   (lambda (condition body state)
-    (if (mathBoolean condition)
-      (stateGlobal body state)
+    (display state) (newline)
+    (if (mathValue condition state)
+      (stateWhile condition body (stateGlobal body state))
       state)))
 ;while helpers
 (define whileConditon cadr)
