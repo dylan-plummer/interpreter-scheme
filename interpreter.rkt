@@ -1,3 +1,6 @@
+;Dylan Plummer, Michael Tucci, Kevin Szmyd
+;Interpreter part 1
+
 (require "simpleParser.scm")
 
 ;interpret takes a filename, calls the parser on that file,
@@ -64,8 +67,6 @@
       ((null? (declareExp statement)) (addToState (variable statement) 'unassigned (removeFromState (variable statement) state)))
       (else (addToState (variable statement) (mathValue (assignmentExp statement) state) (removeFromState (variable statement) state))))))
 
-;declare helpers
-
 ;stateAssign takes a statement containing a variable and an expression and returns
 ;the new state with the variable assigned the value of the expression
 (define stateAssign
@@ -85,7 +86,6 @@
     (if (mathValue condition state)
       (stateWhile condition body (stateGlobal body state))
       state)))
-
 ;while helpers
 (define whileConditon cadr)
 (define whileBody caddr)
@@ -98,7 +98,7 @@
       ((number? (mathValue expression state)) (mathValue expression state))
       (else (boolValue (mathValue expression state))))))
 
-;value takes an expression and returns it's mathematical or boolean value
+;mathValue takes an expression and returns it's mathematical value (integer or boolean)
 (define mathValue
   (lambda (exp state)
     (cond
@@ -113,7 +113,7 @@
       ;&&/||/! evaluation, needs to be in format (operator bool bool) else bad logic
       ((eq? '&& (operator exp)) (and (mathValue (operand1 exp) state) (mathValue (operand2 exp) state)))
       ((eq? '|| (operator exp)) (or (mathValue (operand1 exp) state) (mathValue (operand2 exp) state)))
-      ((eq? (operator exp) '!) (not (mathValue (operand1 exp) state))) ;negation
+      ((eq? (operator exp) '!) (not (mathValue (operand1 exp) state)))
       ;boolean evaluation
       ((eq? '== (operator exp)) (= (mathValue (operand1 exp) state) (mathValue (operand2 exp) state)))
       ((eq? '!= (operator exp)) (not (= (mathValue (operand1 exp) state) (mathValue (operand2 exp) state))))
@@ -122,14 +122,13 @@
       ((eq? '<  (operator exp))  (< (mathValue (operand1 exp) state) (mathValue (operand2 exp) state)))
       ((eq? '>  (operator exp))  (> (mathValue (operand1 exp) state) (mathValue (operand2 exp) state)))
       ;math evaluation
-      ((and (eq? (operator exp) '-) (null? (binaryExp exp))) (- 0 (mathValue (operand1 exp) state))) ;unary negation
+      ((and (eq? (operator exp) '-) (null? (binaryExp exp))) (- 0 (mathValue (operand1 exp) state)))
       ((eq? '+ (operator exp)) (+ (mathValue (operand1 exp) state) (mathValue (operand2 exp) state)))
       ((eq? '- (operator exp)) (- (mathValue (operand1 exp) state) (mathValue (operand2 exp) state)))
       ((eq? '* (operator exp)) (* (mathValue (operand1 exp) state) (mathValue (operand2 exp) state)))
       ((eq? '/ (operator exp)) (quotient (mathValue (operand1 exp) state) (mathValue (operand2 exp) state)))
       ((eq? '% (operator exp)) (remainder (mathValue (operand1 exp) state) (mathValue (operand2 exp) state)))
       (else (error "Unknown Operator")))))
-
 ;mathValue helpers
 (define operator car)
 (define operand1 cadr)
@@ -191,7 +190,6 @@
 (define nextVariable
   (lambda (state)
     (concatNamesAndValues (removeRest (nameBindings state)) (removeRest (valueBindings state)))))
-
 (define removeCurrent car)
 (define removeNext cadr)
 (define removeRest cdr)

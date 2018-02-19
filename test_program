@@ -1,15 +1,10 @@
-var i = 0;
-var j = 0;
-var count = 0;
-var z;
-z = 1;
-i = z + 1;
-while (i < 100)
-	i = i + 1;
-	while (j < 100)
-		if ((j % 2) == 0)
-			j = j + 1;
-		else
-			j = j * 2;
-z = i + j;
-return i == i;
+var x = 0;
+var y = 0;
+while (x < 10)
+	x = x + 1;
+	y = y * 2;
+	if (x < y)
+		x = x + 4;
+	else
+		y = y - 1;
+return x * y;
