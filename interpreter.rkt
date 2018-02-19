@@ -54,7 +54,7 @@
         '()
         (cadddr statement))))
 
-  
+
 ;stateDeclare takes a statement containing a variable and possibly an assignment
 ;and returns the new state with the variable declared
 (define stateDeclare
@@ -146,9 +146,9 @@
         'false)))
 (define binaryExp cddr)
 
-;initial state, no variables declared or assigned
+;initial state, no variables declared or assigned, abstracted!
 (define stateEmpty
-  '(() ()))
+  (list (list) (list)))
 
 ;bindings to the names of variables in the state
 (define nameBindings
