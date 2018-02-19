@@ -15,6 +15,7 @@
     (if (null? parsetree)
       state
       (run (nextLines parsetree) (stateGlobal (currentLine parsetree) state)))))
+
 ;run helpers
 (define nextLines cdr)
 (define currentLine car)
@@ -31,6 +32,7 @@
       ((eq? (langValue statement) '=) (stateAssign (assignExp statement)  state))
       ((eq? (langValue statement) 'if) (stateIf (ifCondition statement) (thenStatement statement) (elseStatement statement) state))
       (else (error "Incorrect syntax")))))
+
 ;global helpers
 (define langValue car)
 (define declareExp cdr)
@@ -45,6 +47,7 @@
     (if (mathValue condition state)
         (stateGlobal statement state)
         (stateGlobal else state))))
+
 ;if helpers
 (define ifCondition cadr)
 (define thenStatement caddr)
@@ -54,7 +57,6 @@
         '()
         (cadddr statement))))
 
-
 ;stateDeclare takes a statement containing a variable and possibly an assignment
 ;and returns the new state with the variable declared
 (define stateDeclare
@@ -63,8 +65,8 @@
       ((null? statement) state)
       ((null? (declareExp statement)) (addToState (variable statement) 'unassigned (removeFromState (variable statement) state)))
       (else (addToState (variable statement) (mathValue (assignmentExp statement) state) (removeFromState (variable statement) state))))))
-;declare helpers
 
+;declare helpers
 
 ;stateAssign takes a statement containing a variable and an expression and returns
 ;the new state with the variable assigned the value of the expression
@@ -74,11 +76,10 @@
     (cond
       ((null? statement) state)
       (else (addToState (variable statement) (mathValue (assignmentExp statement) state) (removeFromState (variable statement) state))))))
+
 ;assignment helpers
-(define assignmentExp
-  cadr)
-(define variable
-  car)
+(define assignmentExp cadr)
+(define variable car)
 
 ;stateWhile takes a while loop condition, a loop body statement, and a state
 ;and returns the new state after the loop is executed
@@ -88,6 +89,7 @@
     (if (mathValue condition state)
       (stateWhile condition body (stateGlobal body state))
       state)))
+
 ;while helpers
 (define whileConditon cadr)
 (define whileBody caddr)
@@ -132,18 +134,14 @@
       ((eq? '/ (operator exp)) (quotient (mathValue (operand1 exp) state) (mathValue (operand2 exp) state)))
       ((eq? '% (operator exp)) (remainder (mathValue (operand1 exp) state) (mathValue (operand2 exp) state)))
       (else (error "Unknown Operator")))))
+
 ;mathValue helpers
-(define operator
-  car)
-(define operand1
-  cadr)
-(define operand2
-  caddr)
+(define operator car)
+(define operand1 cadr)
+(define operand2 caddr)
 (define boolValue
   (lambda (bool)
-    (if bool
-        'true
-        'false)))
+    (if bool 'true 'false)))
 (define binaryExp cddr)
 
 ;initial state, no variables declared or assigned, abstracted!
@@ -151,11 +149,9 @@
   (list (list) (list)))
 
 ;bindings to the names of variables in the state
-(define nameBindings
-  car)
+(define nameBindings car)
 ;bindings to the values of variables in the state
-(define valueBindings
-  cadr)
+(define valueBindings cadr)
 
 ;addToState takes a variable and data and adds it to a state
 (define addToState
@@ -163,6 +159,7 @@
     (if (null? state)
       (concatNamesAndValues (list var) (list data))
       (concatNamesAndValues (addVarName var state) (addVarValue data state)))))
+
 ;addToState helpers
 (define addVarName
   (lambda (var state)
@@ -179,13 +176,13 @@
       ((null? state) stateEmpty)
       ((eq? var (currentVarName state)) (currentVarValue state))
       (else (searchState var (concatNamesAndValues (nextVars (nameBindings state)) (nextVars (valueBindings state))))))))
+
 ;searchState helpers
 (define nextVars cdr)
 (define currentVarName caar)
 (define currentVarValue caadr)
 
 ;removeFromState takes a var and removes it and returns the new state
-;We should abstract some of the repetitive cars and cdrs
 (define removeFromState
   (lambda (var state)
     ;(display state) (newline)
@@ -193,8 +190,14 @@
       ((null? var) state) ;null var, return given state
       ((null? state) state) ;null state, return stateEmpty
       ((or (null? (nameBindings state)) (null? (valueBindings state))) state) ;null names or values
-      ((eq? var (car (nameBindings state))) (list (cdr (nameBindings state)) (cdr (valueBindings state)))) ;var match, return everything else
-      (else (concatNamesAndValues (cons (car (nameBindings state)) (car (removeFromState var (nextVariable state)))) (cons (car (valueBindings state)) (cadr (removeFromState var (nextVariable state)))))))))
+      ((eq? var (RV_current (nameBindings state))) (list (RV_rest (nameBindings state)) (RV_rest (valueBindings state)))) ;var match, return everything else
+      (else (concatNamesAndValues (cons (RV_current (nameBindings state)) (RV_current (removeFromState var (nextVariable state)))) (cons (RV_current (valueBindings state)) (RV_next (removeFromState var (nextVariable state)))))))))
+
+;removeFromState helpers
 (define nextVariable
   (lambda (state)
-    (concatNamesAndValues (cdr (nameBindings state)) (cdr (valueBindings state)))))
+    (concatNamesAndValues (RV_rest (nameBindings state)) (RV_rest (valueBindings state)))))
+
+(define RV_current car)
+(define RV_next cadr)
+(define RV_rest cdr)
