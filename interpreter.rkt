@@ -11,7 +11,6 @@
 ;next line, returning the new state
 (define run
   (lambda (parsetree state)
-    ;(display parsetree) (newline)
     (if (null? parsetree)
       state
       (run (nextLines parsetree) (stateGlobal (currentLine parsetree) state)))))
@@ -24,9 +23,8 @@
 ;evaluating the statement
 (define stateGlobal
   (lambda (statement state)
-    ;(display state) (newline)
     (cond
-      ((eq? (langValue statement) 'return) (stateReturn (returnExp statement) state))
+      ((eq? (langValue statement) 'return) (returnValue (returnExp statement) state))
       ((eq? (langValue statement) 'while) (stateWhile (whileConditon statement) (whileBody statement) state))
       ((eq? (langValue statement) 'var) (stateDeclare (declareExp statement) state))
       ((eq? (langValue statement) '=) (stateAssign (assignExp statement)  state))
@@ -72,7 +70,6 @@
 ;the new state with the variable assigned the value of the expression
 (define stateAssign
   (lambda (statement state)
-    ;(display statement) (newline)
     (cond
       ((null? statement) state)
       (else (addToState (variable statement) (mathValue (assignmentExp statement) state) (removeFromState (variable statement) state))))))
@@ -85,7 +82,6 @@
 ;and returns the new state after the loop is executed
 (define stateWhile
   (lambda (condition body state)
-    (display state) (newline)
     (if (mathValue condition state)
       (stateWhile condition body (stateGlobal body state))
       state)))
@@ -94,9 +90,9 @@
 (define whileConditon cadr)
 (define whileBody caddr)
 
-;stateReturn takes an expression and a state and adds the value of the expression
+;returnValue takes an expression and a state and adds the value of the expression
 ;to the state as the variable 'return
-(define stateReturn
+(define returnValue
   (lambda (expression state)
     (cond
       ((number? (mathValue expression state)) (mathValue expression state))
@@ -105,7 +101,6 @@
 ;value takes an expression and returns it's mathematical or boolean value
 (define mathValue
   (lambda (exp state)
-    ;(display exp) (newline)
     (cond
       ;null/error checks
       ((null? exp) exp)
@@ -174,30 +169,29 @@
   (lambda (var state)
     (cond
       ((null? state) stateEmpty)
-      ((eq? var (currentVarName state)) (currentVarValue state))
-      (else (searchState var (concatNamesAndValues (nextVars (nameBindings state)) (nextVars (valueBindings state))))))))
+      ((eq? var (searchCurrentName state)) (searchCurrentValue state))
+      (else (searchState var (concatNamesAndValues (searchNext (nameBindings state)) (searchNext (valueBindings state))))))))
 
 ;searchState helpers
-(define nextVars cdr)
-(define currentVarName caar)
-(define currentVarValue caadr)
+(define searchNext cdr)
+(define searchCurrentName caar)
+(define searchCurrentValue caadr)
 
 ;removeFromState takes a var and removes it and returns the new state
 (define removeFromState
   (lambda (var state)
-    ;(display state) (newline)
     (cond
       ((null? var) state) ;null var, return given state
       ((null? state) state) ;null state, return stateEmpty
       ((or (null? (nameBindings state)) (null? (valueBindings state))) state) ;null names or values
-      ((eq? var (RV_current (nameBindings state))) (list (RV_rest (nameBindings state)) (RV_rest (valueBindings state)))) ;var match, return everything else
-      (else (concatNamesAndValues (cons (RV_current (nameBindings state)) (RV_current (removeFromState var (nextVariable state)))) (cons (RV_current (valueBindings state)) (RV_next (removeFromState var (nextVariable state)))))))))
+      ((eq? var (removeCurrent (nameBindings state))) (list (removeRest (nameBindings state)) (removeRest (valueBindings state)))) ;var match, return everything else
+      (else (concatNamesAndValues (cons (removeCurrent (nameBindings state)) (removeCurrent (removeFromState var (nextVariable state)))) (cons (removeCurrent (valueBindings state)) (removeNext (removeFromState var (nextVariable state)))))))))
 
 ;removeFromState helpers
 (define nextVariable
   (lambda (state)
-    (concatNamesAndValues (RV_rest (nameBindings state)) (RV_rest (valueBindings state)))))
+    (concatNamesAndValues (removeRest (nameBindings state)) (removeRest (valueBindings state)))))
 
-(define RV_current car)
-(define RV_next cadr)
-(define RV_rest cdr)
+(define removeCurrent car)
+(define removeNext cadr)
+(define removeRest cdr)
