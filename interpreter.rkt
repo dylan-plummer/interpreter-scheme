@@ -167,7 +167,7 @@
 (define searchState
   (lambda (var state)
     (cond
-      ((null? state) stateEmpty)
+      ((or (null? (nameBindings state)) (null? (valueBindings state))) (error "Variable not declared"))
       ((eq? var (searchCurrentName state)) (searchCurrentValue state))
       (else (searchState var (concatNamesAndValues (searchNext (nameBindings state)) (searchNext (valueBindings state))))))))
 
