@@ -90,8 +90,8 @@
 (define whileConditon cadr)
 (define whileBody caddr)
 
-;returnValue takes an expression and a state and adds the value of the expression
-;to the state as the variable 'return
+;returnValue takes an expression and a state and returns the value of the expression
+;as an integer or a boolean
 (define returnValue
   (lambda (expression state)
     (cond
