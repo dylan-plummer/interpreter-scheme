@@ -8,12 +8,13 @@
 ;the proper value
 (define interpret
   (lambda (filename)
-    (run (parser filename) stateEmpty)))
+    (run (parser filename) (list stateEmpty))))
 
 ;run evaluates the current parsetree statement and recursively runs the
 ;next line, returning the new state
 (define run
   (lambda (parsetree state)
+    (display "block ")(display state) (newline)
     (if (null? parsetree)
       state
       (run (nextLines parsetree) (stateGlobal (currentLine parsetree) state)))))
@@ -27,8 +28,10 @@
 (define stateGlobal
   (lambda (statement state)
     (display statement) (newline)
+    (display "current ") (display state) (newline)
     (cond
       ((null? statement) state)
+      ((eq? (langValue statement) 'begin) (stateRemoveLayer (run (cdr statement) (stateAddLayer state))))
       ((eq? (langValue statement) 'return) (returnValue (returnExp statement) state))
       ((eq? (langValue statement) 'while) (stateWhile (whileConditon statement) (whileBody statement) state))
       ((eq? (langValue statement) 'var) (stateDeclare (declareExp statement) state))
@@ -41,6 +44,11 @@
 (define declareExp cdr)
 (define returnExp cadr)
 (define assignExp cdr)
+
+(define stateRemoveLayer cdr)
+(define stateAddLayer
+  (lambda (state)
+    (cons stateEmpty state)))
 
 ;stateIf takes a condition, an if statement, an else statement, and a state
 ;and returns the new state after evaluating either of the statements depending on
@@ -75,7 +83,8 @@
   (lambda (statement state)
     (cond
       ((null? statement) state)
-      (else (addToState (variable statement) (mathValue (assignmentExp statement) state) (removeFromState (variable statement) state))))))
+      (else (replaceInState (variable statement) (mathValue (assignmentExp statement) state) state)))))
+      ;(else (addToState (variable statement) (mathValue (assignmentExp statement) state) (removeFromState (variable statement) state))))))
 
 ;assignment helpers
 (define assignmentExp cadr)
@@ -146,16 +155,24 @@
   (list (list) (list)))
 
 ;bindings to the names of variables in the state
-(define nameBindings car)
+(define nameBindings
+  (lambda (state)
+    ;(display "names ")(display state) (newline)
+    (car (firstLayer state))))
 ;bindings to the values of variables in the state
-(define valueBindings cadr)
+(define valueBindings
+    (lambda (state)
+      (cadr (firstLayer state))))
+(define firstLayer car)
+(define nextLayer cdr)
 
 ;addToState takes a variable and data and adds it to a state
 (define addToState
   (lambda (var data state)
+    (display "add ") (display state) (newline) 
     (if (null? state)
-      (concatNamesAndValues (list var) (list data))
-      (concatNamesAndValues (addVarName var state) (addVarValue data state)))))
+      (cons (concatNamesAndValues (list var) (list data)) (nextLayer state))
+      (cons (concatNamesAndValues (addVarName var state) (addVarValue data state)) (nextLayer state)))))
 
 ;addToState helpers
 (define addVarName
@@ -169,26 +186,86 @@
 ;searchState takes a var and a state and returns associated data
 (define searchState
   (lambda (var state)
+    (display "search ") (display state) (newline) 
     (cond
       ((or (null? (nameBindings state)) (null? (valueBindings state))) (error "Variable not declared"))
       ((eq? var (searchCurrentName state)) (searchCurrentValue state))
-      (else (searchState var (concatNamesAndValues (searchNext (nameBindings state)) (searchNext (valueBindings state))))))))
+      (else (searchState var (nextLayer state))))))
+
+(define inState?
+  (lambda (var state)
+    (cond
+      ((or (null? (nameBindings state)) (null? (valueBindings state))) (error "Variable not declared"))
+      ((eq? var (searchCurrentName state)) #t)
+      (else (inState? var (nextLayer state))))))
 
 ;searchState helpers
 (define searchNext cdr)
-(define searchCurrentName caar)
-(define searchCurrentValue caadr)
+(define searchCurrentName
+  (lambda (state)
+    (caar (firstLayer state))))
+(define searchCurrentValue
+  (lambda (state)
+    (caadr (firstLayer state))))
+
+(define replaceInState
+  (lambda (var val state)
+    (display "replace ") (display state) (newline) 
+    (cond
+      ((or (null? (nameBindings state)) (null? (valueBindings state))) (error "Variable not declared"))
+      ((eq? var (searchCurrentName state)) (cons (list (nameBindings state) (cons val (cdr (valueBindings state)))) (nextLayer state)))
+      (else (cons (firstLayer state) (replaceInState var val (nextLayer state)))))))
 
 ;removeFromState takes a var and removes it and returns the new state
 (define removeFromState
   (lambda (var state)
+    ;(display "remove ") (display state) (newline)
+    (if (null? (nextLayer state))
+        (list (removeFromLayer var (firstLayer state)))
+        (cons (removeFromLayer var (firstLayer state)) (nextLayer state)))))
+(define removeFromLayer
+  (lambda (var layer)
+    (cond
+      ((null? var) layer)
+      ((null? layer) layer)
+      ((or (null? (car layer)) (null? (cadr layer))) layer)
+      ((eq? var (car (car layer))) (list (cdr (car layer)) (cdr (cadr layer))))
+      (else (list (cons (car (car layer)) (car (removeFromLayer var (nextVar layer)))) (cons (car (cadr layer)) (cadr (removeFromLayer var (nextVar layer)))))))))
+(define nextVar
+  (lambda (layer)
+    (list (cdr (car layer)) (cdr (cadr layer)))))
+      
+(define removeFromState*
+  (lambda (var state)
+    (display "remove ") (display state) (newline) 
     (cond
       ((null? var) state) ;null var, return given state
       ((null? state) state) ;null state, return stateEmpty
+      ((null? (firstLayer state)) state)
       ((or (null? (nameBindings state)) (null? (valueBindings state))) state) ;null names or values
-      ((eq? var (removeCurrent (nameBindings state))) (list (removeRest (nameBindings state)) (removeRest (valueBindings state)))) ;var match, return everything else
-      (else (concatNamesAndValues (cons (removeCurrent (nameBindings state)) (removeCurrent (removeFromState var (nextVariable state)))) (cons (removeCurrent (valueBindings state)) (removeNext (removeFromState var (nextVariable state)))))))))
+      ;((and (not (null? (nextLayer state))) (or (null? (nameBindings state)) (null? (valueBindings state)))) (list (list) (removeFromState var (nextLayer state))))
+      ((eq? var (removeCurrent (nameBindings state))) (list (list (removeRest (nameBindings state)) (removeRest (valueBindings state))) (nextLayer state))) ;var match, return everything else
+      ;((null? (nextLayer state)) (concatNamesAndValues (cons (removeCurrent (nameBindings state)) (removeCurrent (removeFromState var (nextVariable state)))) (cons (removeCurrent (valueBindings state)) (removeNext (removeFromState var (nextVariable state))))))
+      ;(else (removeFromState var (removeVar state))))))
+      (else (list (concatNamesAndValues (cons (removeCurrent (nameBindings state)) (removeCurrent (removeFromState var (nextVariable state)))) (cons (removeCurrent (valueBindings state)) (removeNext (removeFromState var (nextVariable state))))) (nextLayer state))))))
+      ;(else (concatNamesAndValues (cons (removeCurrent (nameBindings state)) (removeCurrent (removeFromState var (nextVariable state)))) (cons (removeCurrent (valueBindings state)) (removeNext (removeFromState var (nextVariable state)))))))))
 
+(define removeFromState*
+  (lambda (var state)
+    (display "remove ") (display state) (newline)
+    (cond
+      ((null? var) state)
+      ((null? state) state)
+      ((null? (firstLayer state)) state)
+      ((or (null? (nameBindings state)) (null? (valueBindings state))) state)
+      ;((and (not (null? (nextLayer state))) (or (null? (nameBindings state)) (null? (valueBindings state)))) (list (list) (removeFromState var (nextLayer state))))
+      ;((null? (nameBindings state))) (list (list) (removeFromState var (nextLayer state))))
+      ((eq? var (car (nameBindings state))) (list (list (cdr (nameBindings state)) (cdr (valueBindings state))) (nextLayer state)))
+      (else (removeFromState var (removeVar state))))))
+
+(define removeVar
+  (lambda (state)
+      (list (list (cdr (nameBindings state)) (cdr (valueBindings state))) (nextLayer state))))
 ;removeFromState helpers
 (define nextVariable
   (lambda (state)
