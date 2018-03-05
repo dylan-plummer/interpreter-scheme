@@ -8,16 +8,16 @@
 ;the proper value
 (define interpret
   (lambda (filename)
-    (run (parser filename) (list stateEmpty))))
+    (run (parser filename) (list stateEmpty) (defaultCont) (defaultCont))))
 
 ;run evaluates the current parsetree statement and recursively runs the
 ;next line, returning the new state
 (define run
-  (lambda (parsetree state)
+  (lambda (parsetree state return continue)
     (display "block ")(display state) (newline)
     (if (null? parsetree)
       state
-      (run (nextLines parsetree) (stateGlobal (currentLine parsetree) state)))))
+      (run (nextLines parsetree) (stateGlobal (currentLine parsetree) state return continue) return continue))))
 
 ;run helpers
 (define nextLines cdr)
@@ -26,17 +26,17 @@
 ;stateGlobal takes a statement and a state and returns the new state after
 ;evaluating the statement
 (define stateGlobal
-  (lambda (statement state)
+  (lambda (statement state return continue)
     (display statement) (newline)
     (display "current ") (display state) (newline)
     (cond
       ((null? statement) state)
-      ((eq? (langValue statement) 'begin) (stateRemoveLayer (run (cdr statement) (stateAddLayer state))))
+      ((eq? (langValue statement) 'begin) (stateBeginBlock (cdr statement) state return continue))
       ((eq? (langValue statement) 'return) (returnValue (returnExp statement) state))
       ((eq? (langValue statement) 'while) (stateWhile (whileConditon statement) (whileBody statement) state))
       ((eq? (langValue statement) 'var) (stateDeclare (declareExp statement) state))
       ((eq? (langValue statement) '=) (stateAssign (assignExp statement)  state))
-      ((eq? (langValue statement) 'if) (stateIf (ifCondition statement) (thenStatement statement) (elseStatement statement) state))
+      ((eq? (langValue statement) 'if) (stateIf (ifCondition statement) (thenStatement statement) (elseStatement statement) state return continue))
       (else (error "Incorrect syntax")))))
 
 ;global helpers
@@ -45,19 +45,30 @@
 (define returnExp cadr)
 (define assignExp cdr)
 
-(define stateRemoveLayer cdr)
-(define stateAddLayer
+(define stateBeginBlock
+  (lambda (expression state return continue)
+    (stateEndBlock
+      (call/cc
+        (lambda (cont)
+          (runBlock expression (cons stateEmpty state) return cont))))))
+(define runBlock
+  (lambda (block state return continue)
+    (if (null? block)
+      state
+      (runBlock (nextLines block) (stateGlobal (car block) state return continue) return continue))))
+;gets rid of the layer
+(define stateEndBlock
   (lambda (state)
-    (cons stateEmpty state)))
+    (cdr state)))
 
 ;stateIf takes a condition, an if statement, an else statement, and a state
 ;and returns the new state after evaluating either of the statements depending on
 ;the condition
 (define stateIf
-  (lambda (condition statement else state)
+  (lambda (condition statement else state return continue)
     (if (mathValue condition state)
-        (stateGlobal statement state)
-        (stateGlobal else state))))
+        (stateGlobal statement state return continue)
+        (stateGlobal else state return continue))))
 
 ;if helpers
 (define ifCondition cadr)
@@ -186,18 +197,12 @@
 ;searchState takes a var and a state and returns associated data
 (define searchState
   (lambda (var state)
-    (display "search ") (display state) (newline) 
+    (display "search ") (display var)(display " in ")(display state) (newline) 
     (cond
-      ((or (null? (nameBindings state)) (null? (valueBindings state))) (error "Variable not declared"))
+      ((or (null? (nameBindings state)) (null? (valueBindings state))) (searchState var (nextLayer state)))
       ((eq? var (searchCurrentName state)) (searchCurrentValue state))
-      (else (searchState var (nextLayer state))))))
-
-(define inState?
-  (lambda (var state)
-    (cond
-      ((or (null? (nameBindings state)) (null? (valueBindings state))) (error "Variable not declared"))
-      ((eq? var (searchCurrentName state)) #t)
-      (else (inState? var (nextLayer state))))))
+      ((null? (cdr (nameBindings state))) (searchState var (nextLayer state)))
+      (else (searchState var (cons (concatNamesAndValues (searchNext (nameBindings state)) (searchNext (valueBindings state))) (nextLayer state)))))))
 
 ;searchState helpers
 (define searchNext cdr)
@@ -210,10 +215,11 @@
 
 (define replaceInState
   (lambda (var val state)
-    (display "replace ") (display state) (newline) 
+    (display "replace ")(display var)(display " in ") (display state) (newline) 
     (cond
-      ((or (null? (nameBindings state)) (null? (valueBindings state))) (error "Variable not declared"))
+      ((or (null? (nameBindings state)) (null? (valueBindings state))) (replaceInState var val (nextLayer state)))
       ((eq? var (searchCurrentName state)) (cons (list (nameBindings state) (cons val (cdr (valueBindings state)))) (nextLayer state)))
+      ((null? (cdr (nameBindings state))) (replaceInState var val (nextLayer state)))
       (else (cons (firstLayer state) (replaceInState var val (nextLayer state)))))))
 
 ;removeFromState takes a var and removes it and returns the new state
@@ -233,3 +239,7 @@
 (define nextVar
   (lambda (layer)
     (list (cdr (car layer)) (cdr (cadr layer)))))
+
+(define defaultCont
+  (lambda ()
+    (lambda (v) v)))
