@@ -219,7 +219,6 @@
 ;removeFromState takes a var and removes it and returns the new state
 (define removeFromState
   (lambda (var state)
-    ;(display "remove ") (display state) (newline)
     (if (null? (nextLayer state))
         (list (removeFromLayer var (firstLayer state)))
         (cons (removeFromLayer var (firstLayer state)) (nextLayer state)))))
@@ -234,42 +233,3 @@
 (define nextVar
   (lambda (layer)
     (list (cdr (car layer)) (cdr (cadr layer)))))
-      
-(define removeFromState*
-  (lambda (var state)
-    (display "remove ") (display state) (newline) 
-    (cond
-      ((null? var) state) ;null var, return given state
-      ((null? state) state) ;null state, return stateEmpty
-      ((null? (firstLayer state)) state)
-      ((or (null? (nameBindings state)) (null? (valueBindings state))) state) ;null names or values
-      ;((and (not (null? (nextLayer state))) (or (null? (nameBindings state)) (null? (valueBindings state)))) (list (list) (removeFromState var (nextLayer state))))
-      ((eq? var (removeCurrent (nameBindings state))) (list (list (removeRest (nameBindings state)) (removeRest (valueBindings state))) (nextLayer state))) ;var match, return everything else
-      ;((null? (nextLayer state)) (concatNamesAndValues (cons (removeCurrent (nameBindings state)) (removeCurrent (removeFromState var (nextVariable state)))) (cons (removeCurrent (valueBindings state)) (removeNext (removeFromState var (nextVariable state))))))
-      ;(else (removeFromState var (removeVar state))))))
-      (else (list (concatNamesAndValues (cons (removeCurrent (nameBindings state)) (removeCurrent (removeFromState var (nextVariable state)))) (cons (removeCurrent (valueBindings state)) (removeNext (removeFromState var (nextVariable state))))) (nextLayer state))))))
-      ;(else (concatNamesAndValues (cons (removeCurrent (nameBindings state)) (removeCurrent (removeFromState var (nextVariable state)))) (cons (removeCurrent (valueBindings state)) (removeNext (removeFromState var (nextVariable state)))))))))
-
-(define removeFromState*
-  (lambda (var state)
-    (display "remove ") (display state) (newline)
-    (cond
-      ((null? var) state)
-      ((null? state) state)
-      ((null? (firstLayer state)) state)
-      ((or (null? (nameBindings state)) (null? (valueBindings state))) state)
-      ;((and (not (null? (nextLayer state))) (or (null? (nameBindings state)) (null? (valueBindings state)))) (list (list) (removeFromState var (nextLayer state))))
-      ;((null? (nameBindings state))) (list (list) (removeFromState var (nextLayer state))))
-      ((eq? var (car (nameBindings state))) (list (list (cdr (nameBindings state)) (cdr (valueBindings state))) (nextLayer state)))
-      (else (removeFromState var (removeVar state))))))
-
-(define removeVar
-  (lambda (state)
-      (list (list (cdr (nameBindings state)) (cdr (valueBindings state))) (nextLayer state))))
-;removeFromState helpers
-(define nextVariable
-  (lambda (state)
-    (concatNamesAndValues (removeRest (nameBindings state)) (removeRest (valueBindings state)))))
-(define removeCurrent car)
-(define removeNext cadr)
-(define removeRest cdr)
