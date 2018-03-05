@@ -33,7 +33,7 @@
       ((null? statement) state)
       ((eq? (langValue statement) 'begin) (stateBeginBlock (cdr statement) state return continue))
       ((eq? (langValue statement) 'return) (returnValue (returnExp statement) state))
-      ((eq? (langValue statement) 'while) (stateWhile (whileConditon statement) (whileBody statement) state))
+      ((eq? (langValue statement) 'while) (stateWhile (whileConditon statement) (whileBody statement) state return continue))
       ((eq? (langValue statement) 'var) (stateDeclare (declareExp statement) state))
       ((eq? (langValue statement) '=) (stateAssign (assignExp statement)  state))
       ((eq? (langValue statement) 'if) (stateIf (ifCondition statement) (thenStatement statement) (elseStatement statement) state return continue))
@@ -47,10 +47,8 @@
 
 (define stateBeginBlock
   (lambda (expression state return continue)
-    (stateEndBlock
-      (call/cc
-        (lambda (cont)
-          (runBlock expression (cons stateEmpty state) return cont))))))
+    (display "block ")(display expression)(display " state ") (display state) (newline)
+    (stateEndBlock (runBlock expression (cons stateEmpty state) return continue))))
 (define runBlock
   (lambda (block state return continue)
     (if (null? block)
@@ -59,7 +57,8 @@
 ;gets rid of the layer
 (define stateEndBlock
   (lambda (state)
-    (cdr state)))
+    (display "end block")(display state) (newline)
+    state))
 
 ;stateIf takes a condition, an if statement, an else statement, and a state
 ;and returns the new state after evaluating either of the statements depending on
@@ -104,9 +103,9 @@
 ;stateWhile takes a while loop condition, a loop body statement, and a state
 ;and returns the new state after the loop is executed
 (define stateWhile
-  (lambda (condition body state)
+  (lambda (condition body state return continue)
     (if (mathValue condition state)
-      (stateWhile condition body (stateGlobal body state))
+      (stateWhile condition body (stateGlobal body state return continue) return continue)
       state)))
 ;while helpers
 (define whileConditon cadr)
@@ -213,14 +212,38 @@
   (lambda (state)
     (caadr (firstLayer state))))
 
-(define replaceInState
+(define replaceInState*
   (lambda (var val state)
     (display "replace ")(display var)(display " in ") (display state) (newline) 
     (cond
       ((or (null? (nameBindings state)) (null? (valueBindings state))) (replaceInState var val (nextLayer state)))
       ((eq? var (searchCurrentName state)) (cons (list (nameBindings state) (cons val (cdr (valueBindings state)))) (nextLayer state)))
       ((null? (cdr (nameBindings state))) (replaceInState var val (nextLayer state)))
-      (else (cons (firstLayer state) (replaceInState var val (nextLayer state)))))))
+      (else (addToState (car (nameBindings state)) (car (valueBindings state)) (replaceInState var val (cons (list (cdr (nameBindings state)) (cdr (valueBindings state))) (nextLayer state))))))))
+      ;(else (cons (firstLayer state) (replaceInState var val (nextLayer state)))))))
+(define replaceInState
+  (lambda (var val state)
+    (display "replace ")(display var)(display " in ") (display state) (newline)
+    (if (null? (nextLayer state))
+        (list (replaceInLayer var val (firstLayer state)))
+        (cons (replaceInLayer var val (firstLayer state)) (replaceInState var val (nextLayer state))))))
+
+; replace-value
+; Given a variable name, value, and state, find the location within the state where the given variable name is stored and replace its value, and return the new state
+(define replaceInLayer
+  (lambda (var val layer)
+    (display "replaceLayer ")(display var)(display " in ") (display layer) (newline)
+    (replaceInLayer-cps var val (car layer) (cadr layer) (lambda (l1 l2) (list l1 l2)))))
+
+; tail recursive helper for replace-value
+(define replaceInLayer-cps
+  (lambda (var val names values return)
+    (display "replaceLayer-cps ")(display var)(display " in ") (display names)(display values) (newline)
+    (cond
+      ((null? names) (return names values))
+      ((equal? var (car names)) (return names (cons val (cdr values))))
+      (else (replaceInLayer-cps var val (cdr names) (cdr values) (lambda (l1 l2) (return (cons (car names) l1) (cons (car values) l2))))))))
+
 
 ;removeFromState takes a var and removes it and returns the new state
 (define removeFromState
