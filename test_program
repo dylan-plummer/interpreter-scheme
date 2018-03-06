@@ -1,14 +1,12 @@
-var a = 31160;
-var b = 1476;
-if (a < b) {
-  var temp = a;
-  a = b;
-  b = temp;
+var x = 1;
+var y = x + 1;
+if (x < y) {
+  var z = 10;
+
+  if (x < z) {
+    var swap = y;
+    y = x;
+    x = swap;
+  }
 }
-var r = a % b;
-while (r != 0) {
-  a = b;
-  b = r;
-  r = a % b;
-}
-return b;
+return x;

@@ -14,7 +14,7 @@
 ;next line, returning the new state
 (define run
   (lambda (parsetree state return continue)
-    (display "block ")(display state) (newline)
+    (display "block ")(display parsetree) (newline)
     (if (null? parsetree)
       state
       (run (nextLines parsetree) (stateGlobal (currentLine parsetree) state return continue) return continue))))
@@ -224,9 +224,12 @@
 (define replaceInState
   (lambda (var val state)
     (display "replace ")(display var)(display " in ") (display state) (newline)
+    (replaceInState-cps var val state (lambda (l1) l1))))
+(define replaceInState-cps
+  (lambda (var val state return)
     (if (null? (nextLayer state))
-        (list (replaceInLayer var val (firstLayer state)))
-        (cons (replaceInLayer var val (firstLayer state)) (replaceInState var val (nextLayer state))))))
+        (return (list (replaceInLayer var val (firstLayer state))))
+        (replaceInState-cps var val (nextLayer state) (lambda (l1) (cons (replaceInLayer var val (firstLayer state)) l1))))))
 
 ; replace-value
 ; Given a variable name, value, and state, find the location within the state where the given variable name is stored and replace its value, and return the new state
@@ -235,7 +238,7 @@
     (display "replaceLayer ")(display var)(display " in ") (display layer) (newline)
     (replaceInLayer-cps var val (car layer) (cadr layer) (lambda (l1 l2) (list l1 l2)))))
 
-; tail recursive helper for replace-value
+; tail recursive helper for replaceInLayer
 (define replaceInLayer-cps
   (lambda (var val names values return)
     (display "replaceLayer-cps ")(display var)(display " in ") (display names)(display values) (newline)
