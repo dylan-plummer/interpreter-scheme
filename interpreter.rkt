@@ -17,7 +17,7 @@
     ;(display "block ")(display parsetree) (newline)
     (if (null? parsetree)
       state
-      (run (nextLines parsetree) (stateGlobal (currentLine parsetree) state return continue) return continue))))
+      (run (nextLines parsetree) (stateGlobal (currentLine parsetree) state return continue) return continue break))))
 
 ;run helpers
 (define nextLines cdr)
@@ -26,17 +26,17 @@
 ;stateGlobal takes a statement and a state and returns the new state after
 ;evaluating the statement
 (define stateGlobal
-  (lambda (statement state return continue)
+  (lambda (statement state return continue break)
     (display statement) (newline)
     (display "current ") (display state) (newline)
     (cond
       ((null? statement) state)
       ((eq? (langValue statement) 'begin) (stateBeginBlock (cdr statement) state return continue))
       ((eq? (langValue statement) 'return) (returnValue (returnExp statement) state))
-      ((eq? (langValue statement) 'while) (stateWhile (whileConditon statement) (whileBody statement) state return continue))
+      ((eq? (langValue statement) 'while) (stateWhile (whileConditon statement) (whileBody statement) state return continue break))
       ((eq? (langValue statement) 'var) (stateDeclare (declareExp statement) state))
       ((eq? (langValue statement) '=) (stateAssign (assignExp statement)  state))
-      ((eq? (langValue statement) 'if) (stateIf (ifCondition statement) (thenStatement statement) (elseStatement statement) state return continue))
+      ((eq? (langValue statement) 'if) (stateIf (ifCondition statement) (thenStatement statement) (elseStatement statement) state return continue break))
       (else (error "Incorrect syntax")))))
 
 ;global helpers
@@ -53,7 +53,7 @@
   (lambda (block state return continue)
     (if (null? block)
       state
-      (runBlock (nextLines block) (stateGlobal (car block) state return continue) return continue))))
+      (runBlock (nextLines block) (stateGlobal (car block) state return continue) return continue break))))
 ;gets rid of the layer
 (define stateEndBlock
   (lambda (state)
@@ -64,10 +64,10 @@
 ;and returns the new state after evaluating either of the statements depending on
 ;the condition
 (define stateIf
-  (lambda (condition statement else state return continue)
+  (lambda (condition statement else state return continue break)
     (if (mathValue condition state)
-        (stateGlobal statement state return continue)
-        (stateGlobal else state return continue))))
+        (stateGlobal statement state return continue break)
+        (stateGlobal else state return continue break))))
 
 ;if helpers
 (define ifCondition cadr)
@@ -105,7 +105,7 @@
 (define stateWhile
   (lambda (condition body state return continue)
     (if (mathValue condition state)
-      (stateWhile condition body (stateGlobal body state return continue) return continue)
+      (stateWhile condition body (stateGlobal body state return continue) return continue break)
       state)))
 ;while helpers
 (define whileConditon cadr)
