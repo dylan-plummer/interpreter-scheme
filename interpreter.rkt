@@ -1,6 +1,8 @@
 ;Dylan Plummer, Michael Tucci, Kevin Szmyd
 ;Interpreter part 1
 
+;things to cps: run and runBlock?
+
 (require "simpleParser.scm")
 
 ;interpret takes a filename, calls the parser on that file,
@@ -8,16 +10,16 @@
 ;the proper value
 (define interpret
   (lambda (filename)
-    (run (parser filename) (list stateEmpty) (defaultCont) (defaultCont))))
+    (run (parser filename) (list stateEmpty) (defaultCont) (defaultCont) (defaultCont))))
 
 ;run evaluates the current parsetree statement and recursively runs the
 ;next line, returning the new state
 (define run
-  (lambda (parsetree state return continue)
+  (lambda (parsetree state return continue break)
     ;(display "block ")(display parsetree) (newline)
     (if (null? parsetree)
       state
-      (run (nextLines parsetree) (stateGlobal (currentLine parsetree) state return continue) return continue break))))
+      (run (nextLines parsetree) (stateGlobal (currentLine parsetree) state return continue break) return continue break))))
 
 ;run helpers
 (define nextLines cdr)
@@ -31,13 +33,17 @@
     (display "current ") (display state) (newline)
     (cond
       ((null? statement) state)
-      ((eq? (langValue statement) 'begin) (stateBeginBlock (cdr statement) state return continue))
+      ((eq? (langValue statement) 'begin) (stateBeginBlock (cdr statement) state return continue break))
+      ((eq? (langValue statement) 'break) (break state))
+      ((eq? (langValue statement) 'continue) (continue state))
       ((eq? (langValue statement) 'return) (returnValue (returnExp statement) state))
       ((eq? (langValue statement) 'while) (stateWhile (whileConditon statement) (whileBody statement) state return continue break))
       ((eq? (langValue statement) 'var) (stateDeclare (declareExp statement) state))
       ((eq? (langValue statement) '=) (stateAssign (assignExp statement)  state))
       ((eq? (langValue statement) 'if) (stateIf (ifCondition statement) (thenStatement statement) (elseStatement statement) state return continue break))
       (else (error "Incorrect syntax")))))
+
+
 
 ;global helpers
 (define langValue car)
@@ -46,16 +52,16 @@
 (define assignExp cdr)
 
 (define stateBeginBlock
-  (lambda (expression state return continue)
+  (lambda (expression state return continue break)
     (display "block ")(display expression)(display " state ") (display state) (newline)
-    (stateEndBlock (runBlock expression (cons stateEmpty state) return continue))))
+    (runBlock expression (cons stateEmpty state) return continue break)))
 (define runBlock
-  (lambda (block state return continue)
+  (lambda (block state return continue break)
     (if (null? block)
       state
-      (runBlock (nextLines block) (stateGlobal (car block) state return continue) return continue break))))
+      (runBlock (nextLines block) (stateGlobal (car block) state return continue break) return continue break))))
 ;gets rid of the layer
-(define stateEndBlock
+(define statePopLayer
   (lambda (state)
     (display "end block")(display state) (newline)
     (cdr state)))
@@ -103,10 +109,13 @@
 ;stateWhile takes a while loop condition, a loop body statement, and a state
 ;and returns the new state after the loop is executed
 (define stateWhile
-  (lambda (condition body state return continue)
-    (if (mathValue condition state)
-      (stateWhile condition body (stateGlobal body state return continue) return continue break)
-      state)))
+  (lambda (condition body state return continue break)
+    (call/cc
+     (lambda (newBreak)
+       (if (mathValue condition state)
+           (stateGlobal body state return (lambda (s2)
+             (stateWhile condition body s2 return continue break)) newBreak)
+           (continue state))))))
 ;while helpers
 (define whileConditon cadr)
 (define whileBody caddr)
@@ -179,7 +188,7 @@
 ;addToState takes a variable and data and adds it to a state
 (define addToState
   (lambda (var data state)
-    (display "add ") (display state) (newline) 
+    (display "add ") (display state) (newline)
     (if (null? state)
       (cons (concatNamesAndValues (list var) (list data)) (nextLayers state))
       (cons (concatNamesAndValues (addVarName var state) (addVarValue data state)) (nextLayers state)))))
@@ -196,7 +205,7 @@
 ;searchState takes a var and a state and returns associated data
 (define searchState
   (lambda (var state)
-    (display "search ") (display var)(display " in ")(display state) (newline) 
+    (display "search ") (display var)(display " in ")(display state) (newline)
     (cond
       ((or (null? (nameBindings state)) (null? (valueBindings state))) (searchState var (nextLayers state)))
       ((eq? var (searchCurrentName state)) (searchCurrentValue state))
@@ -210,7 +219,7 @@
       ((null? (car layer)) #f)
       ((eq? (caar layer) var) #t)
       (else (inLayer? var (list (cdr (car layer)) (cdr (cdr layer))))))))
-      
+
 
 ;searchState helpers
 (define searchNext cdr)
