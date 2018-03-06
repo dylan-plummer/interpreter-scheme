@@ -1,12 +1,11 @@
-var x = 1;
-var y = x + 1;
-if (x < y) {
-  var z = 10;
+var x = 0;
+var result = 0;
 
-  if (x < z) {
-    var swap = y;
-    y = x;
-    x = swap;
+while (x < 10) {
+  if (result > 15) {
+    return result;
   }
+  result = result + x;
+  x = x + 1;
 }
-return x;
+return result;

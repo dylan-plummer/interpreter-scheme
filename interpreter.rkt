@@ -14,7 +14,7 @@
 ;next line, returning the new state
 (define run
   (lambda (parsetree state return continue)
-    (display "block ")(display parsetree) (newline)
+    ;(display "block ")(display parsetree) (newline)
     (if (null? parsetree)
       state
       (run (nextLines parsetree) (stateGlobal (currentLine parsetree) state return continue) return continue))))
@@ -58,7 +58,7 @@
 (define stateEndBlock
   (lambda (state)
     (display "end block")(display state) (newline)
-    state))
+    (cdr state)))
 
 ;stateIf takes a condition, an if statement, an else statement, and a state
 ;and returns the new state after evaluating either of the statements depending on
@@ -174,15 +174,15 @@
     (lambda (state)
       (cadr (firstLayer state))))
 (define firstLayer car)
-(define nextLayer cdr)
+(define nextLayers cdr)
 
 ;addToState takes a variable and data and adds it to a state
 (define addToState
   (lambda (var data state)
     (display "add ") (display state) (newline) 
     (if (null? state)
-      (cons (concatNamesAndValues (list var) (list data)) (nextLayer state))
-      (cons (concatNamesAndValues (addVarName var state) (addVarValue data state)) (nextLayer state)))))
+      (cons (concatNamesAndValues (list var) (list data)) (nextLayers state))
+      (cons (concatNamesAndValues (addVarName var state) (addVarValue data state)) (nextLayers state)))))
 
 ;addToState helpers
 (define addVarName
@@ -198,10 +198,19 @@
   (lambda (var state)
     (display "search ") (display var)(display " in ")(display state) (newline) 
     (cond
-      ((or (null? (nameBindings state)) (null? (valueBindings state))) (searchState var (nextLayer state)))
+      ((or (null? (nameBindings state)) (null? (valueBindings state))) (searchState var (nextLayers state)))
       ((eq? var (searchCurrentName state)) (searchCurrentValue state))
-      ((null? (cdr (nameBindings state))) (searchState var (nextLayer state)))
-      (else (searchState var (cons (concatNamesAndValues (searchNext (nameBindings state)) (searchNext (valueBindings state))) (nextLayer state)))))))
+      ((null? (cdr (nameBindings state))) (searchState var (nextLayers state)))
+      (else (searchState var (cons (concatNamesAndValues (searchNext (nameBindings state)) (searchNext (valueBindings state))) (nextLayers state)))))))
+
+(define inLayer?
+  (lambda (var layer)
+    (cond
+      ((null? layer) #f)
+      ((null? (car layer)) #f)
+      ((eq? (caar layer) var) #t)
+      (else (inLayer? var (list (cdr (car layer)) (cdr (cdr layer))))))))
+      
 
 ;searchState helpers
 (define searchNext cdr)
@@ -212,27 +221,18 @@
   (lambda (state)
     (caadr (firstLayer state))))
 
-(define replaceInState*
-  (lambda (var val state)
-    (display "replace ")(display var)(display " in ") (display state) (newline) 
-    (cond
-      ((or (null? (nameBindings state)) (null? (valueBindings state))) (replaceInState var val (nextLayer state)))
-      ((eq? var (searchCurrentName state)) (cons (list (nameBindings state) (cons val (cdr (valueBindings state)))) (nextLayer state)))
-      ((null? (cdr (nameBindings state))) (replaceInState var val (nextLayer state)))
-      (else (addToState (car (nameBindings state)) (car (valueBindings state)) (replaceInState var val (cons (list (cdr (nameBindings state)) (cdr (valueBindings state))) (nextLayer state))))))))
-      ;(else (cons (firstLayer state) (replaceInState var val (nextLayer state)))))))
+;replaceInstate takes a variable, a value, and a state and returns the new state with that variable's value replaced with the given value
 (define replaceInState
   (lambda (var val state)
     (display "replace ")(display var)(display " in ") (display state) (newline)
-    (replaceInState-cps var val state (lambda (l1) l1))))
-(define replaceInState-cps
-  (lambda (var val state return)
-    (if (null? (nextLayer state))
-        (return (list (replaceInLayer var val (firstLayer state))))
-        (replaceInState-cps var val (nextLayer state) (lambda (l1) (cons (replaceInLayer var val (firstLayer state)) l1))))))
+    ;recurse through layer, if it's empty, go to the next layer
+    ;if variable found, replace it, otherwise keep going through layer
+    (cond
+      ((inLayer? var (firstLayer state)) (cons (replaceInLayer var val (firstLayer state)) (nextLayers state)))
+      (else (cons (firstLayer state) (replaceInState var val (nextLayers state)))))))
 
-; replace-value
-; Given a variable name, value, and state, find the location within the state where the given variable name is stored and replace its value, and return the new state
+; replaceInLayer
+; Given a variable name, value, and layer, find the location within the layer where the given variable name is stored and replace its value, and return the new layer
 (define replaceInLayer
   (lambda (var val layer)
     (display "replaceLayer ")(display var)(display " in ") (display layer) (newline)
@@ -251,9 +251,9 @@
 ;removeFromState takes a var and removes it and returns the new state
 (define removeFromState
   (lambda (var state)
-    (if (null? (nextLayer state))
+    (if (null? (nextLayers state))
         (list (removeFromLayer var (firstLayer state)))
-        (cons (removeFromLayer var (firstLayer state)) (nextLayer state)))))
+        (cons (removeFromLayer var (firstLayer state)) (nextLayers state)))))
 (define removeFromLayer
   (lambda (var layer)
     (cond
