@@ -10,13 +10,15 @@
 ;the proper value
 (define interpret
   (lambda (filename)
-    (run (parser filename) (list stateEmpty) returnValue (defaultCont) (defaultCont))))
+    (call/cc
+     (lambda (return)
+       (run (parser filename) (list stateEmpty) return (defaultCont) (defaultCont))))))
 
 ;run evaluates the current parsetree statement and recursively runs the
 ;next line, returning the new state
 (define run
   (lambda (parsetree state return continue break)
-    ;(display "block ")(display parsetree) (newline)
+    ;(display "Current Line ")(display parsetree) (newline)
     (if (null? parsetree)
       state
       (run (nextLines parsetree) (stateGlobal (currentLine parsetree) state return continue break) return continue break))))
@@ -29,14 +31,14 @@
 ;evaluating the statement
 (define stateGlobal
   (lambda (statement state return continue break)
-    (display statement) (newline)
-    (display "current ") (display state) (newline)
+    ;(display statement) (newline)
+    ;(display "Global call ") (display state) (newline)
     (cond
       ((null? statement) state)
       ((eq? (langValue statement) 'begin) (stateBeginBlock (cdr statement) state return continue break))
       ((eq? (langValue statement) 'break) (break state))
       ((eq? (langValue statement) 'continue) (stateContinue state continue))
-      ((eq? (langValue statement) 'return) (return (returnExp statement) state))
+      ((eq? (langValue statement) 'return) (returnValue (returnExp statement) state return continue break))
       ((eq? (langValue statement) 'while) (stateWhile (whileConditon statement) (whileBody statement) state return continue break))
       ((eq? (langValue statement) 'var) (stateDeclare (declareExp statement) state))
       ((eq? (langValue statement) '=) (stateAssign (assignExp statement)  state))
@@ -53,7 +55,7 @@
 
 (define stateBeginBlock
   (lambda (expression state return continue break)
-    (display "block ")(display expression)(display " state ") (display state) (newline)
+    ;(display "block ")(display expression)(display " state ") (display state) (newline)
     (runBlock expression (cons stateEmpty state) return continue break)))
 (define runBlock
   (lambda (block state return continue break)
@@ -63,7 +65,7 @@
 ;gets rid of the layer
 (define statePopLayer
   (lambda (state)
-    (display "end block")(display state) (newline)
+    ;(display "end block")(display state) (newline)
     (cdr state)))
 
 (define stateContinue
@@ -132,10 +134,10 @@
 ;returnValue takes an expression and a state and returns the value of the expression
 ;as an integer or a boolean
 (define returnValue
-  (lambda (expression state)
+  (lambda (expression state return continue break)
     (cond
-      ((number? (mathValue expression state)) (mathValue expression state))
-      (else (boolValue (mathValue expression state))))))
+      ((number? (mathValue expression state)) (return (mathValue expression state)))
+      (else (return (boolValue (mathValue expression state)))))))
 
 ;mathValue takes an expression and returns it's mathematical value (integer or boolean)
 (define mathValue
@@ -197,7 +199,7 @@
 ;addToState takes a variable and data and adds it to a state
 (define addToState
   (lambda (var data state)
-    (display "add ") (display state) (newline)
+    ;(display "add ") (display state) (newline)
     (if (null? state)
       (cons (concatNamesAndValues (list var) (list data)) (nextLayers state))
       (cons (concatNamesAndValues (addVarName var state) (addVarValue data state)) (nextLayers state)))))
@@ -214,7 +216,7 @@
 ;searchState takes a var and a state and returns associated data
 (define searchState
   (lambda (var state)
-    (display "search ") (display var)(display " in ")(display state) (newline)
+    ;(display "search ") (display var)(display " in ")(display state) (newline)
     (cond
       ((or (null? (nameBindings state)) (null? (valueBindings state))) (searchState var (nextLayers state)))
       ((eq? var (searchCurrentName state)) (searchCurrentValue state))
@@ -242,7 +244,7 @@
 ;replaceInstate takes a variable, a value, and a state and returns the new state with that variable's value replaced with the given value
 (define replaceInState
   (lambda (var val state)
-    (display "replace ")(display var)(display " in ") (display state) (newline)
+    ;(display "replace ")(display var)(display " in ") (display state) (newline)
     ;recurse through layer, if it's empty, go to the next layer
     ;if variable found, replace it, otherwise keep going through layer
     (cond
@@ -253,13 +255,13 @@
 ; Given a variable name, value, and layer, find the location within the layer where the given variable name is stored and replace its value, and return the new layer
 (define replaceInLayer
   (lambda (var val layer)
-    (display "replaceLayer ")(display var)(display " in ") (display layer) (newline)
+    ;(display "replaceLayer ")(display var)(display " in ") (display layer) (newline)
     (replaceInLayer-cps var val (car layer) (cadr layer) (lambda (l1 l2) (list l1 l2)))))
 
 ; tail recursive helper for replaceInLayer
 (define replaceInLayer-cps
   (lambda (var val names values return)
-    (display "replaceLayer-cps ")(display var)(display " in ") (display names)(display values) (newline)
+    ;(display "replaceLayer-cps ")(display var)(display " in ") (display names)(display values) (newline)
     (cond
       ((null? names) (return names values))
       ((equal? var (car names)) (return names (cons val (cdr values))))
