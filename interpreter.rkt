@@ -10,16 +10,16 @@
   (lambda (filename)
     (call/cc
      (lambda (return)
-       (run (parser filename) (list stateEmpty) return (defaultCont) (defaultCont))))))
+       (run (parser filename) (list stateEmpty) return (defaultCont) (defaultCont) (defaultThrow))))))
 
 ;run evaluates the current parsetree statement and recursively runs the
 ;next line, returning the new state
 (define run
-  (lambda (parsetree state return continue break)
+  (lambda (parsetree state return continue break throw)
     ;(display "Current Line ")(display parsetree) (newline)
     (if (null? parsetree)
       state
-      (run (nextLines parsetree) (stateGlobal (currentLine parsetree) state return continue break) return continue break))))
+      (run (nextLines parsetree) (stateGlobal (currentLine parsetree) state return continue break) return continue break throw))))
 
 ;run helpers
 (define nextLines cdr)
@@ -51,13 +51,13 @@
 (define stateBeginBlock
   (lambda (expression state return continue break)
     ;(display "block ")(display expression)(display " state ") (display state) (newline)
-    (runBlock expression (cons stateEmpty state) return continue break)))
+    (runBlock expression (cons stateEmpty state) return continue break throw)))
 
 (define runBlock
-  (lambda (block state return continue break)
+  (lambda (block state return continue break throw)
     (if (null? block)
       state
-      (runBlock (nextLines block) (stateGlobal (car block) state return continue break) return continue break))))
+      (runBlock (nextLines block) (stateGlobal (car block) state return continue break) return continue break throw))))
 
 ;gets rid of the first layer in state
 (define statePopLayer
@@ -298,5 +298,9 @@
     (list (cdr (car layer)) (cdr (cadr layer)))))
 
 (define defaultCont
+  (lambda ()
+    (lambda (v) v)))
+
+(define defaultThrow
   (lambda ()
     (lambda (v) v)))
