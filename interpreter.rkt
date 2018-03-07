@@ -19,7 +19,7 @@
     ;(display "Current Line ")(display parsetree) (newline)
     (if (null? parsetree)
       state
-      (run (nextLines parsetree) (stateGlobal (currentLine parsetree) state return continue break) return continue break throw))))
+      (run (nextLines parsetree) (stateGlobal (currentLine parsetree) state return continue break throw) return continue break throw))))
 
 ;run helpers
 (define nextLines cdr)
@@ -28,28 +28,30 @@
 ;stateGlobal takes a statement and a state and returns the new state after
 ;evaluating the statement
 (define stateGlobal
-  (lambda (statement state return continue break)
+  (lambda (statement state return continue break throw)
     ;(display "Global call ") (display state) (newline)
     (cond
       ((null? statement) state)
-      ((eq? (langValue statement) 'begin) (stateBeginBlock (cdr statement) state return continue break))
+      ((eq? (langValue statement) 'begin) (stateBeginBlock (cdr statement) state return continue break throw))
       ((eq? (langValue statement) 'break) (break state))
       ((eq? (langValue statement) 'continue) (stateContinue state continue))
-      ((eq? (langValue statement) 'return) (returnValue (returnExp statement) state return continue break))
-      ((eq? (langValue statement) 'while) (stateWhile (whileConditon statement) (whileBody statement) state return continue break))
+      ;((eq? (langValue statement) 'throw) (throw state))
+      ((eq? (langValue statement) 'return) (returnValue (returnExp statement) state return continue break throw))
+      ((eq? (langValue statement) 'while) (stateWhile (whileConditon statement) (whileBody statement) state return continue break throw))
       ((eq? (langValue statement) 'var) (stateDeclare (declareExp statement) state))
       ((eq? (langValue statement) '=) (stateAssign (assignExp statement)  state))
-      ((eq? (langValue statement) 'if) (stateIf (ifCondition statement) (thenStatement statement) (elseStatement statement) state return continue break))
+      ((eq? (langValue statement) 'if) (stateIf (ifCondition statement) (thenStatement statement) (elseStatement statement) state return continue break throw))
       (else (error "Incorrect syntax")))))
 
-;global helpers
+;stateGlobal helpers
 (define langValue car)
 (define declareExp cdr)
 (define returnExp cadr)
 (define assignExp cdr)
 
+
 (define stateBeginBlock
-  (lambda (expression state return continue break)
+  (lambda (expression state return continue break throw)
     ;(display "block ")(display expression)(display " state ") (display state) (newline)
     (runBlock expression (cons stateEmpty state) return continue break throw)))
 
@@ -57,7 +59,7 @@
   (lambda (block state return continue break throw)
     (if (null? block)
       state
-      (runBlock (nextLines block) (stateGlobal (car block) state return continue break) return continue break throw))))
+      (runBlock (nextLines block) (stateGlobal (car block) state return continue break throw) return continue break throw))))
 
 ;gets rid of the first layer in state
 (define statePopLayer
@@ -73,10 +75,10 @@
 ;and returns the new state after evaluating either of the statements depending on
 ;the condition
 (define stateIf
-  (lambda (condition statement else state return continue break)
+  (lambda (condition statement else state return continue break throw)
     (if (mathValue condition state)
-        (stateGlobal statement state return continue break)
-        (stateGlobal else state return continue break))))
+        (stateGlobal statement state return continue break throw)
+        (stateGlobal else state return continue break throw))))
 
 ;if helpers
 (define ifCondition cadr)
@@ -113,18 +115,18 @@
 ;stateWhile takes a while loop condition, a loop body statement, and a state
 ;and returns the new state after the loop is executed
 (define stateWhile
-  (lambda (condition body state return continue break)
+  (lambda (condition body state return continue break throw)
     (call/cc
      (lambda (newBreak)
-       (stateWhileLoop condition body state return continue newBreak)))))
+       (stateWhileLoop condition body state return continue newBreak throw)))))
 
 (define stateWhileLoop
-  (lambda (condition body state return continue break)
+  (lambda (condition body state return continue break throw)
     (if (mathValue condition state)
         (stateWhileLoop condition body (call/cc
                                         (lambda (newContinue)
-                                          (stateGlobal body state return newContinue break)))
-                        return continue break)
+                                          (stateGlobal body state return newContinue break throw)))
+                        return continue break throw)
         state)))
 
 ;while helpers
@@ -134,7 +136,7 @@
 ;returnValue takes an expression and a state and returns the value of the expression
 ;as an integer or a boolean
 (define returnValue
-  (lambda (expression state return continue break)
+  (lambda (expression state return continue break throw)
     (cond
       ((number? (mathValue expression state)) (return (mathValue expression state)))
       (else (return (boolValue (mathValue expression state)))))))
