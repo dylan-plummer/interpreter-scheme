@@ -29,7 +29,6 @@
 ;evaluating the statement
 (define stateGlobal
   (lambda (statement state return continue break)
-    ;(display statement) (newline)
     ;(display "Global call ") (display state) (newline)
     (cond
       ((null? statement) state)
@@ -152,13 +151,12 @@
       ((not (list? exp)) (searchState exp state)) ;not  number, yet not a list...must be a variable!
       ((number? (operator exp)) (error "Invalid expression")) ;the expression has no operator :(
       ((eq? '!= (operator exp)) (not (= (mathValue (operand1 exp) state) (mathValue (operand2 exp) state))))
-      ((eq? '! (operator exp)) (mathValue (operand1 exp) state))
+      ((eq? '! (operator exp)) (not (mathValue (operand1 exp) state)))
       ((and (eq? (operator exp) '-) (null? (binaryExp exp))) (- 0 (mathValue (operand1 exp) state)))
       ((or (eq? (mathValue (operand1 exp) state) 'unassigned) (eq? (mathValue(operand2 exp) state) 'unassigned)) (error "Variable has not been assigned a value"))
       ;&&/||/! evaluation, needs to be in format (operator bool bool) else bad logic
       ((eq? '&& (operator exp)) (and (mathValue (operand1 exp) state) (mathValue (operand2 exp) state)))
       ((eq? '|| (operator exp)) (or (mathValue (operand1 exp) state) (mathValue (operand2 exp) state)))
-      ((eq? (operator exp) '!) (not (mathValue (operand1 exp) state)))
       ;boolean evaluation
       ((eq? '== (operator exp)) (= (mathValue (operand1 exp) state) (mathValue (operand2 exp) state)))
       ((eq? '<= (operator exp)) (<= (mathValue (operand1 exp) state) (mathValue (operand2 exp) state)))
