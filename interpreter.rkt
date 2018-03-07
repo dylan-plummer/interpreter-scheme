@@ -1,8 +1,6 @@
 ;Dylan Plummer, Michael Tucci, Kevin Szmyd
 ;Interpreter part 1
 
-;things to cps: run and runBlock?
-
 (require "simpleParser.scm")
 
 ;interpret takes a filename, calls the parser on that file,
@@ -45,8 +43,6 @@
       ((eq? (langValue statement) 'if) (stateIf (ifCondition statement) (thenStatement statement) (elseStatement statement) state return continue break))
       (else (error "Incorrect syntax")))))
 
-
-
 ;global helpers
 (define langValue car)
 (define declareExp cdr)
@@ -57,12 +53,14 @@
   (lambda (expression state return continue break)
     ;(display "block ")(display expression)(display " state ") (display state) (newline)
     (runBlock expression (cons stateEmpty state) return continue break)))
+
 (define runBlock
   (lambda (block state return continue break)
     (if (null? block)
       state
       (runBlock (nextLines block) (stateGlobal (car block) state return continue break) return continue break))))
-;gets rid of the layer
+
+;gets rid of the first layer in state
 (define statePopLayer
   (lambda (state)
     ;(display "end block")(display state) (newline)
@@ -84,6 +82,7 @@
 ;if helpers
 (define ifCondition cadr)
 (define thenStatement caddr)
+
 (define elseStatement
   (lambda (statement)
     (if (null? (cdddr statement))
@@ -119,6 +118,7 @@
     (call/cc
      (lambda (newBreak)
        (stateWhileLoop condition body state return continue newBreak)))))
+
 (define stateWhileLoop
   (lambda (condition body state return continue break)
     (if (mathValue condition state)
@@ -127,6 +127,7 @@
                                           (stateGlobal body state return newContinue break)))
                         return continue break)
         state)))
+
 ;while helpers
 (define whileConditon cadr)
 (define whileBody caddr)
@@ -171,13 +172,16 @@
       ((eq? '/ (operator exp)) (quotient (mathValue (operand1 exp) state) (mathValue (operand2 exp) state)))
       ((eq? '% (operator exp)) (remainder (mathValue (operand1 exp) state) (mathValue (operand2 exp) state)))
       (else (error "Unknown Operator")))))
+
 ;mathValue helpers
 (define operator car)
 (define operand1 cadr)
 (define operand2 caddr)
+
 (define boolValue
   (lambda (bool)
     (if bool 'true 'false)))
+
 (define binaryExp cddr)
 
 ;initial state, no variables declared or assigned, abstracted!
@@ -189,10 +193,12 @@
   (lambda (state)
     ;(display "names ")(display state) (newline)
     (car (firstLayer state))))
+
 ;bindings to the values of variables in the state
 (define valueBindings
     (lambda (state)
       (cadr (firstLayer state))))
+
 (define firstLayer car)
 (define nextLayers cdr)
 
@@ -208,9 +214,11 @@
 (define addVarName
   (lambda (var state)
     (cons var (nameBindings state))))
+
 (define addVarValue
   (lambda (data state)
     (cons data (valueBindings state))))
+
 (define concatNamesAndValues list)
 
 ;searchState takes a var and a state and returns associated data
@@ -231,17 +239,19 @@
       ((eq? (caar layer) var) #t)
       (else (inLayer? var (list (cdr (car layer)) (cdr (cdr layer))))))))
 
-
 ;searchState helpers
 (define searchNext cdr)
+
 (define searchCurrentName
   (lambda (state)
     (caar (firstLayer state))))
+
 (define searchCurrentValue
   (lambda (state)
     (caadr (firstLayer state))))
 
-;replaceInstate takes a variable, a value, and a state and returns the new state with that variable's value replaced with the given value
+;replaceInstate takes a variable, a value, and a state and returns the new state
+;with that variable's value replaced with the given value
 (define replaceInState
   (lambda (var val state)
     ;(display "replace ")(display var)(display " in ") (display state) (newline)
@@ -252,7 +262,8 @@
       (else (cons (firstLayer state) (replaceInState var val (nextLayers state)))))))
 
 ; replaceInLayer
-; Given a variable name, value, and layer, find the location within the layer where the given variable name is stored and replace its value, and return the new layer
+; Given a variable name, value, and layer, find the location within the layer
+; where the given variable name is stored and replace its value, and return the new layer
 (define replaceInLayer
   (lambda (var val layer)
     ;(display "replaceLayer ")(display var)(display " in ") (display layer) (newline)
@@ -274,6 +285,7 @@
     (if (null? (nextLayers state))
         (list (removeFromLayer var (firstLayer state)))
         (cons (removeFromLayer var (firstLayer state)) (nextLayers state)))))
+
 (define removeFromLayer
   (lambda (var layer)
     (cond
@@ -282,6 +294,7 @@
       ((or (null? (car layer)) (null? (cadr layer))) layer)
       ((eq? var (car (car layer))) (list (cdr (car layer)) (cdr (cadr layer))))
       (else (list (cons (car (car layer)) (car (removeFromLayer var (nextVar layer)))) (cons (car (cadr layer)) (cadr (removeFromLayer var (nextVar layer)))))))))
+
 (define nextVar
   (lambda (layer)
     (list (cdr (car layer)) (cdr (cadr layer)))))
