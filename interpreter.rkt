@@ -10,7 +10,7 @@
 ;the proper value
 (define interpret
   (lambda (filename)
-    (run (parser filename) (list stateEmpty) (defaultCont) (defaultCont) (defaultCont))))
+    (run (parser filename) (list stateEmpty) returnValue (defaultCont) (defaultCont))))
 
 ;run evaluates the current parsetree statement and recursively runs the
 ;next line, returning the new state
@@ -35,8 +35,8 @@
       ((null? statement) state)
       ((eq? (langValue statement) 'begin) (stateBeginBlock (cdr statement) state return continue break))
       ((eq? (langValue statement) 'break) (break state))
-      ((eq? (langValue statement) 'continue) (continue state))
-      ((eq? (langValue statement) 'return) (returnValue (returnExp statement) state))
+      ((eq? (langValue statement) 'continue) (stateContinue state continue))
+      ((eq? (langValue statement) 'return) (return (returnExp statement) state))
       ((eq? (langValue statement) 'while) (stateWhile (whileConditon statement) (whileBody statement) state return continue break))
       ((eq? (langValue statement) 'var) (stateDeclare (declareExp statement) state))
       ((eq? (langValue statement) '=) (stateAssign (assignExp statement)  state))
@@ -65,6 +65,10 @@
   (lambda (state)
     (display "end block")(display state) (newline)
     (cdr state)))
+
+(define stateContinue
+  (lambda (state continue)
+    (continue (statePopLayer state))))
 
 ;stateIf takes a condition, an if statement, an else statement, and a state
 ;and returns the new state after evaluating either of the statements depending on
@@ -112,10 +116,15 @@
   (lambda (condition body state return continue break)
     (call/cc
      (lambda (newBreak)
-       (if (mathValue condition state)
-           (stateGlobal body state return (lambda (s2)
-             (stateWhile condition body s2 return continue break)) newBreak)
-           (continue state))))))
+       (stateWhileLoop condition body state return continue newBreak)))))
+(define stateWhileLoop
+  (lambda (condition body state return continue break)
+    (if (mathValue condition state)
+        (stateWhileLoop condition body (call/cc
+                                        (lambda (newContinue)
+                                          (stateGlobal body state return newContinue break)))
+                        return continue break)
+        state)))
 ;while helpers
 (define whileConditon cadr)
 (define whileBody caddr)
