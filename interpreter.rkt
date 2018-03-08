@@ -37,7 +37,7 @@
       ((eq? (langValue statement) 'continue) (stateContinue state continue))
       ((eq? (langValue statement) 'try)  (stateTry statement state return continue break throw)) ;and null checks for catch and finally
       ((eq? (langValue statement) 'throw) (throw state)) ;throw holds a function that returns a value
-      ((eq? (langValue statement) 'catch) (stateCatch (catchBody statement) (carchName statement) state return continue break throw)) ;catch opens a new layer for a new block and within that layer creates a new varable of name catch("name") = mathValue((throw state))
+      ((eq? (langValue statement) 'catch) (stateCatch (caadr (car statement)) (cadr (cadr statement)) state return continue break throw)) ;catch opens a new layer for a new block and within that layer creates a new varable of name catch("name") = mathValue((throw state))
       ((eq? (langValue statement) 'finally) (runBlock (blockBody statement) state return continue break throw)) ;executes code within regardless of rest of the try block, has try block scope
       ((eq? (langValue statement) 'return) (returnValue (returnExp statement) state return continue break throw))
       ((eq? (langValue statement) 'while) (stateWhile (whileConditon statement) (whileBody statement) state return continue break throw))
@@ -52,7 +52,7 @@
 (define returnExp cadr)
 (define assignExp cdr)
 (define blockBody cadr)
-(define catchBody caadr)
+
 (define catchName (lambda (stmt) (car (cadr stmt))))
 (define wholeBody cdr)
 
@@ -76,16 +76,18 @@
 
 (define stateTry
   (lambda (statement state return continue break throw)
+    (display statement) (newline)
     (cond
       ((null? (cddr statement)) (tryCatchFinally (blockBody statement) NULL NULL state return continue break throw)) ;no catch, no finally
-      ((eq? (cddr statement) 'finally) (tryCatchFinally (blockBody statement) NULL (cddr statment) state return continue break throw)) ;no catch, try, finally
-      ((null? (cdddr statement)) (tryCatchFinally (blockBody statement) (cddr statement) NULL state return continue break throw)) ;no finally, try, catch
-      (else (tryCatchFinally (blockBody statement) (cddr statement) (cdddr statement) state return continue break throw)))))
+      ((eq? (cddr statement) 'finally) (tryCatchFinally (blockBody statement) NULL (caddr statment) state return continue break throw)) ;no catch, try, finally
+      ((null? (cdddr statement)) (tryCatchFinally (blockBody statement) (caddr statement) NULL state return continue break throw)) ;no finally, try, catch
+      (else (tryCatchFinally (blockBody statement) (caddr statement) (cdddr statement) state return continue break throw)))))
 
 (define NULL (list))
 
 (define tryCatchFinally
   (lambda (tryBody catchBody finallyBody state return continue break throw)
+    (display "try body ")(display tryBody)(display " catch body ")(display catchBody)(newline)
     (call/cc
       (lambda (newThrow)
         (cond
@@ -94,9 +96,10 @@
 
 (define stateCatch ;creates a new block and scope for catch body with the thrown variable
   (lambda (body state return continue break throw)
+    (display "stateCatch ")(display body)(newline)
     (if (null? body)
-      (runBlock body (addtoState (throw state) name state) return continue break throw)
-      state)))
+      state
+      (runBlock body (addToState (throw state) name state) return continue break throw))))
 
 (define stateContinue
   (lambda (state continue)
