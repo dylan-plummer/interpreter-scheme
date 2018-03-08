@@ -10,7 +10,7 @@
   (lambda (filename)
     (call/cc
      (lambda (return)
-       (run (parser filename) (list stateEmpty) return (defaultCont) (defaultCont) (defaultThrow))))))
+       (run (parser filename) (list stateEmpty) return defaultContinue defaultBreak (defaultThrow))))))
 
 ;run evaluates the current parsetree statement and recursively runs the
 ;next line, returning the new state
@@ -32,10 +32,10 @@
     ;(display "Global call ") (display state) (newline)
     (cond
       ((null? statement) state)
-      ((eq? (langValue statement) 'begin) (stateBeginBlock (cdr statement) state return continue break throw))
-      ((eq? (langValue statement) 'break) (break state))
+      ((eq? (langValue statement) 'begin) (statePopLayer (stateBeginBlock (cdr statement) state return continue break throw)))
+      ((eq? (langValue statement) 'break) (break (statePopLayer state)))
       ((eq? (langValue statement) 'continue) (stateContinue state continue))
-      ;((eq? (langValue statement) 'throw) (throw state))
+      ;((eq? (langValue statement) 'throw) (throw (math))
       ((eq? (langValue statement) 'return) (returnValue (returnExp statement) state return continue break throw))
       ((eq? (langValue statement) 'while) (stateWhile (whileConditon statement) (whileBody statement) state return continue break throw))
       ((eq? (langValue statement) 'var) (stateDeclare (declareExp statement) state))
@@ -141,6 +141,7 @@
       ((number? (mathValue expression state)) (return (mathValue expression state)))
       (else (return (boolValue (mathValue expression state)))))))
 
+
 ;mathValue takes an expression and returns it's mathematical value (integer or boolean)
 (define mathValue
   (lambda (exp state)
@@ -226,6 +227,7 @@
   (lambda (var state)
     ;(display "search ") (display var)(display " in ")(display state) (newline)
     (cond
+      ((null? state) (error "Variable not in scope"))
       ((or (null? (nameBindings state)) (null? (valueBindings state))) (searchState var (nextLayers state)))
       ((eq? var (searchCurrentName state)) (searchCurrentValue state))
       ((null? (cdr (nameBindings state))) (searchState var (nextLayers state)))
@@ -299,9 +301,12 @@
   (lambda (layer)
     (list (cdr (car layer)) (cdr (cadr layer)))))
 
-(define defaultCont
-  (lambda ()
-    (lambda (v) v)))
+(define defaultContinue
+  (lambda (state)
+    (error "Can't call continue here")))
+(define defaultBreak
+  (lambda (state)
+    (error "Can't call break here")))
 
 (define defaultThrow
   (lambda ()
