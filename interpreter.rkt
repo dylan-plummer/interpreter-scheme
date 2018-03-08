@@ -97,6 +97,8 @@
 (define stateCatch ;creates a new block and scope for catch body with the thrown variable
   (lambda (body state return continue break throw)
     (display "stateCatch ")(display body)(newline)
+    (display (throw state)) (newline)
+    (display "stateCatch ")(display body)(newline)
     (if (null? body)
       state
       (runBlock body (addToState (throw state) name state) return continue break throw))))
@@ -264,7 +266,7 @@
       ((null? state) (error "Variable not in scope"))
       ((or (null? (nameBindings state)) (null? (valueBindings state))) (searchState var (nextLayers state)))
       ((eq? var (searchCurrentName state)) (searchCurrentValue state))
-      ((null? (restofNames (nameBindings state))) (searchState var (nextLayers state)))
+      ((null? (restOfNames (nameBindings state))) (searchState var (nextLayers state)))
       (else (searchState var (cons (concatNamesAndValues (searchNext (nameBindings state)) (searchNext (valueBindings state))) (nextLayers state)))))))
 
 ;searchState abstraction
@@ -338,7 +340,7 @@
       ((null? layer) layer)
       ((or (null? (firstBlock layer)) (null? (secondBlock layer))) layer)
       ((eq? var (firstVar (firstBlock layer))) (list (remainingVars (firstBlock layer)) (remainingVars (secondBlock layer))))
-      (else (list (cons (firstVar (firstBlock layer)) (firstVar (removeFromLayer var (nextVar layer)))) (cons (firstVar (secondBlock layer)) (secondBlocl (removeFromLayer var (nextVar layer)))))))))
+      (else (list (cons (firstVar (firstBlock layer)) (firstVar (removeFromLayer var (nextVar layer)))) (cons (firstVar (secondBlock layer)) (secondBlock (removeFromLayer var (nextVar layer)))))))))
 
 ;helper functions for layering
 (define firstBlock car)
