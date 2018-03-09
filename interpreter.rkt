@@ -16,7 +16,6 @@
 ;next line, returning the new state
 (define run
   (lambda (parsetree state return continue break throw)
-    (display "Current Line ")(display parsetree) (newline)
     (if (null? parsetree)
       state
       (run (nextLines parsetree) (stateGlobal (currentLine parsetree) state return continue break throw) return continue break throw))))
@@ -29,15 +28,13 @@
 ;evaluating the statement
 (define stateGlobal
   (lambda (statement state return continue break throw)
-    ;(display "Global call ") (display state) (newline)
     (cond
       ((null? statement) state)
       ((eq? (langValue statement) 'begin) (statePopLayer (stateBeginBlock (wholeBody statement) state return continue break throw)))
       ((eq? (langValue statement) 'break) (break (statePopLayer state)))
       ((eq? (langValue statement) 'continue) (stateContinue state continue))
       ((eq? (langValue statement) 'try)  (stateTry statement state return continue break throw)) ;and null checks for catch and finally
-      ((eq? (langValue statement) 'throw) (throw (mathValue (cadr statement) state) state)) ;throw holds a function that returns a value
-      ((eq? (langValue statement) 'catch) (stateCatch (caadr (car statement)) (cadr (cadr statement)) state return continue break throw)) ;catch opens a new layer for a new block and within that layer creates a new varable of name catch("name") = mathValue((throw state))
+      ((eq? (langValue statement) 'throw) (throw (mathValue (throwStatement statement) state) state)) ;throw holds a function that returns a value
       ((eq? (langValue statement) 'finally) (runBlock (blockBody statement) state return continue break throw)) ;executes code within regardless of rest of the try block, has try block scope
       ((eq? (langValue statement) 'return) (returnValue (returnExp statement) state return continue break throw))
       ((eq? (langValue statement) 'while) (stateWhile (whileConditon statement) (whileBody statement) state return continue break throw))
@@ -52,45 +49,41 @@
 (define returnExp cadr)
 (define assignExp cdr)
 (define blockBody cadr)
+(define throwStatement cadr)
 
-(define catchName (lambda (stmt) (car (cadr stmt))))
+(define catchName (lambda (statement) (car (cadr statement))))
 (define wholeBody cdr)
 
 
 (define stateBeginBlock
   (lambda (expression state return continue break throw)
-    ;(display "block ")(display expression)(display " state ") (display state) (newline)
     (runBlock expression (cons stateEmpty state) return continue break throw)))
 
 (define runBlock
   (lambda (block state return continue break throw)
-    (display "block ")(display block)(display " state ")(display state)(newline)
     (if (null? block)
       state
-      (runBlock (nextLines block) (stateGlobal (car block) state return continue break throw) return continue break throw))))
-
+      (runBlock (nextLines block) (stateGlobal (currentLine block) state return continue break throw) return continue break throw))))
 ;gets rid of the first layer in state
 (define statePopLayer
   (lambda (state)
-    ;(display "end block")(display state) (newline)
     (cdr state)))
 
 (define stateTry
   (lambda (statement state return continue break throw)
-    (display statement) (newline)
     (cond
-      ((null? (cddr statement)) (tryCatchFinally (blockBody statement) NULL NULL state return continue break throw)) ;no catch, no finally
-      ((eq? (cddr statement) 'finally) (tryCatchFinally (blockBody statement) NULL (caddr statment) state return continue break throw)) ;no catch, try, finally
-      ((null? (cdddr statement)) (tryCatchFinally (blockBody statement) (caddr statement) NULL state return continue break throw)) ;no finally, try, catch
-      (else (tryCatchFinally (blockBody statement) (caddr statement) (finallyBlock statement) state return continue break throw)))))
+      ((and (null? (catchBody statement)) (null? (finallyBlock statement))) (tryCatchFinally (blockBody statement) NULL NULL state return continue break throw)) ;no catch, no finally
+      ((null? (catchBody statement)) (tryCatchFinally (blockBody statement) NULL (finallyBlock statement) state return continue break throw)) ;no catch, try, finally
+      ((null? (finallyBlock statement)) (tryCatchFinally (blockBody statement) (catchBody statement) NULL state return continue break throw)) ;no finally, try, catch
+      (else (tryCatchFinally (blockBody statement) (catchBody statement) (finallyBlock statement) state return continue break throw)))))
 
 (define finallyBlock cdddr)
+(define catchBody caddr)
 
 (define NULL (list))
 
 (define tryCatchFinally
   (lambda (tryBody catchBody finallyBody state return continue break throw)
-    (display "finally body ")(display finallyBody)(newline)
     (cond
       ((null? finallyBody)
        (call/cc
@@ -103,12 +96,10 @@
 
 (define stateCatch ;creates a new block and scope for catch body with the thrown variable
   (lambda (body val state return continue break throw)
-    (display "stateCatch ")(display body)(newline)
-    ;(display (throw state)) (newline)
-    (display "stateCatch ")(display (caddr body))(newline)
     (if (null? body)
       state
-      (runBlock (caddr body) (addToState (caadr body) val state) return continue break throw))))
+      (runBlock (catchBody body) (addToState (catchValue body) val state) return continue break throw))))
+(define catchValue caadr)
 
 (define stateContinue
   (lambda (state continue)
@@ -149,7 +140,6 @@
     (cond
       ((null? statement) state)
       (else (replaceInState (variable statement) (mathValue (assignmentExp statement) state) state)))))
-      ;(else (addToState (variable statement) (mathValue (assignmentExp statement) state) (removeFromState (variable statement) state))))))
 
 ;assignment helpers
 (define assignmentExp cadr)
@@ -283,13 +273,9 @@
   (lambda (var layer)
     (cond
       ((null? layer) #f)
-      ((null? (firstIn layer)) #f)
+      ((null? (car layer)) #f)
       ((eq? (caar layer) var) #t)
-      (else (inLayer? var (list (cdr (firstIn layer)) (cdr (cdr layer))))))))
-
-;inLayer? helpers
-(define firstIn car)
-
+      (else (inLayer? var (list (cdr (car layer)) (cdr (cdr layer))))))))
 
 ;searchState helpers
 (define searchNext cdr)
@@ -306,7 +292,6 @@
 ;with that variable's value replaced with the given value
 (define replaceInState
   (lambda (var val state)
-    ;(display "replace ")(display var)(display " in ") (display state) (newline)
     ;recurse through layer, if it's empty, go to the next layer
     ;if variable found, replace it, otherwise keep going through layer
     (cond
