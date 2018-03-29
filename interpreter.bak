@@ -44,10 +44,6 @@
 (define functionName cadr)
 (define functionParams caddr)
 (define functionBody cadddr)
-
-(define createClosure
-  (lambda (params body name)
-    (list params 
     
 ;run helpers
 (define nextLines cdr)
