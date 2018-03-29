@@ -9,13 +9,12 @@
   (lambda (filename)
     (call/cc
      (lambda (return)
-       (run (parser filename) (list stateEmpty) return defaultContinue defaultBreak defaultThrow)))))
+       (stateGlobal (parser filename) (list stateEmpty) return defaultContinue defaultBreak defaultThrow)))))
 
 ;run evaluates the current parsetree statement and recursively runs the
 ;next line, returning the new state
 (define run
   (lambda (parsetree state return continue break throw)
-    (logln parsetree)
     (if (null? parsetree)
       state
       (run (nextLines parsetree) (evaluateStatement (currentLine parsetree) state return continue break throw) return continue break throw))))
@@ -23,32 +22,50 @@
 ;stateGlobal takes in the parse tree and creates the base layer of the state
 ;which contains only functions and global variables
 (define stateGlobal
-  (lambda (parsetree state)
-    (logln parsetree)
+  (lambda (parsetree state return continue break throw)
     (if (null? parsetree)
-        state
-        (stateGlobal (nextLines parsetree) (evaluateGlobalStatement (currentLine parsetree) state)))))
+        (runFunction (searchState 'main state) '() state return continue break throw)
+        (stateGlobal (nextLines parsetree) (evaluateGlobalStatement (currentLine parsetree) state return continue break throw) return continue break throw))))
 ;evaluateGlobalStatement takes a statement from the outermost layer of the program
 ;and either binds a function to its closure or adds a variable to the state
 (define evaluateGlobalStatement
-  (lambda (statement state)
+  (lambda (statement state return continue break throw)
     (cond
       ((null? statement) state)
       ((eq? (langValue statement) 'function) (bindFunctionClosure statement state))
+      ((eq? (langValue statement) 'var) (stateDeclare (declareExp statement) state return continue break throw))
       (else (error "Incorrect Syntax")))))
+
 ;bindFunctionClosure takes a statement of the form (function <name> <params> <body>)
 ;and returns the new state resulting from adding the function to the current state
 (define bindFunctionClosure
   (lambda (statement state)
-    (addToState (functionName statement) (createClosure (functionParams statement) (functionBody statement)))))
+    (addToState (functionName statement) (createClosure (functionParams statement) (functionBody statement) (functionName statement)) state)))
 (define functionName cadr)
 (define functionParams caddr)
 (define functionBody cadddr)
 
 (define createClosure
   (lambda (params body name)
-    (list params 
-    
+    (list params body (generateFunctionState name))))
+(define generateFunctionState
+  (lambda (name)
+    (lambda (state)
+      state)))
+(define runFunction
+  (lambda (closure params state return continue break throw)
+    ;(logln "runFunction params" params) 
+    (stateBeginBlock (getFunctionBody closure)  (setActualParams params (getFormalParams closure) ((getStateFunc closure) state)  return continue break throw) return continue break throw)))
+(define getFormalParams car)
+(define getStateFunc caddr)
+(define getFunctionBody cadr)
+(define setActualParams
+  (lambda (actualParams formalParams state return continue break throw)
+    ;(logln "setActualParams" actualParams)
+    (if (null? actualParams)
+      state
+      (setActualParams (cdr actualParams) (cdr formalParams) (addToState (car formalParams) (mathValue (car actualParams) state return continue break throw) state) return continue break throw))))
+
 ;run helpers
 (define nextLines cdr)
 (define currentLine car)
@@ -57,18 +74,19 @@
 ;evaluating the statement
 (define evaluateStatement
   (lambda (statement state return continue break throw)
+    ;(logln "evaluateState state" state)
     (cond
       ((null? statement) state)
       ((eq? (langValue statement) 'begin) (statePopLayer (stateBeginBlock (wholeBody statement) state return continue break throw)))
       ((eq? (langValue statement) 'break) (break (statePopLayer state)))
       ((eq? (langValue statement) 'continue) (stateContinue state continue))
       ((eq? (langValue statement) 'try)  (stateTry statement state return continue break throw))
-      ((eq? (langValue statement) 'throw) (throw (mathValue (throwStatement statement) state) state))
+      ((eq? (langValue statement) 'throw) (throw (mathValue (throwStatement statement) state) state return continue break throw))
       ((eq? (langValue statement) 'finally) (runBlock (blockBody statement) state return continue break throw)) ;executes code within regardless of rest of the try block, has try block scope
       ((eq? (langValue statement) 'return) (returnValue (returnExp statement) state return continue break throw))
       ((eq? (langValue statement) 'while) (stateWhile (whileConditon statement) (whileBody statement) state return continue break throw))
-      ((eq? (langValue statement) 'var) (stateDeclare (declareExp statement) state))
-      ((eq? (langValue statement) '=) (stateAssign (assignExp statement)  state))
+      ((eq? (langValue statement) 'var) (stateDeclare (declareExp statement) state return continue break throw))
+      ((eq? (langValue statement) '=) (stateAssign (assignExp statement) state return continue break throw))
       ((eq? (langValue statement) 'if) (stateIf (ifCondition statement) (thenStatement statement) (elseStatement statement) state return continue break throw))
       (else (error "Incorrect syntax")))))
 
@@ -139,7 +157,7 @@
 ;the condition
 (define stateIf
   (lambda (condition statement else state return continue break throw)
-    (if (mathValue condition state)
+    (if (mathValue condition state return continue break throw)
         (evaluateStatement statement state return continue break throw)
         (evaluateStatement else state return continue break throw))))
 
@@ -156,19 +174,19 @@
 ;stateDeclare takes a statement containing a variable and possibly an assignment
 ;and returns the new state with the variable declared
 (define stateDeclare
-  (lambda (statement state)
+  (lambda (statement state return continue break throw)
     (cond
       ((null? statement) state)
       ((null? (declareExp statement)) (addToState (variable statement) 'unassigned (removeFromState (variable statement) state)))
-      (else (addToState (variable statement) (mathValue (assignmentExp statement) state) (removeFromState (variable statement) state))))))
+      (else (addToState (variable statement) (mathValue (assignmentExp statement) state return continue break throw) (removeFromState (variable statement) state))))))
 
 ;stateAssign takes a statement containing a variable and an expression and returns
 ;the new state with the variable assigned the value of the expression
 (define stateAssign
-  (lambda (statement state)
+  (lambda (statement state return continue break throw)
     (cond
       ((null? statement) state)
-      (else (replaceInState (variable statement) (mathValue (assignmentExp statement) state) state)))))
+      (else (replaceInState (variable statement) (mathValue (assignmentExp statement) state return continue break throw) state)))))
 
 ;assignment helpers
 (define assignmentExp cadr)
@@ -184,7 +202,7 @@
 
 (define stateWhileLoop
   (lambda (condition body state return continue break throw)
-    (if (mathValue condition state)
+    (if (mathValue condition state return continue break throw)
         (stateWhileLoop condition body (call/cc
                                         (lambda (newContinue)
                                           (evaluateStatement body state return newContinue break throw)))
@@ -200,13 +218,14 @@
 (define returnValue
   (lambda (expression state return continue break throw)
     (cond
-      ((number? (mathValue expression state)) (return (mathValue expression state)))
-      (else (return (boolValue (mathValue expression state)))))))
+      ((number? (mathValue expression state return continue break throw)) (return (mathValue expression state  return continue break throw)))
+      (else (return (boolValue (mathValue expression state  return continue break throw)))))))
 
 
 ;mathValue takes an expression and returns it's mathematical value (integer or boolean)
 (define mathValue
-  (lambda (exp state)
+  (lambda (exp state return continue break throw)
+    ;(logln "mathValue exp" exp)
     (cond
       ;null/error checks
       ((null? exp) exp)
@@ -215,31 +234,39 @@
       ((eq? exp 'false) #f)
       ((not (list? exp)) (searchState exp state)) ;not  number, yet not a list...must be a variable!
       ((number? (operator exp)) (error "Invalid expression")) ;the expression has no operator :(
-      ((eq? '!= (operator exp)) (not (= (mathValue (operand1 exp) state) (mathValue (operand2 exp) state))))
-      ((eq? '! (operator exp)) (not (mathValue (operand1 exp) state)))
+      ((eq? (operator exp) 'funcall)
+       (call/cc
+        (lambda (newReturn)
+          (runFunction (searchState (cadr exp) state) (getActualParams exp) state newReturn continue break throw))))
+      ((eq? '!= (operator exp)) (not (= (mathValue (operand1 exp) state) (mathValue (operand2 exp) state) return continue break throw)))
+      ((eq? '! (operator exp)) (not (mathValue (operand1 exp) state return continue break throw)))
       ((and (eq? (operator exp) '-) (null? (binaryExp exp))) (- 0 (mathValue (operand1 exp) state)))
-      ((or (eq? (mathValue (operand1 exp) state) 'unassigned) (eq? (mathValue(operand2 exp) state) 'unassigned)) (error "Variable has not been assigned a value"))
+      ((or (eq? (mathValue (operand1 exp) state return continue break throw) 'unassigned) (eq? (mathValue(operand2 exp) state return continue break throw) 'unassigned)) (error "Variable has not been assigned a value"))
       ;&&/||/! evaluation, needs to be in format (operator bool bool) else bad logic
-      ((eq? '&& (operator exp)) (and (mathValue (operand1 exp) state) (mathValue (operand2 exp) state)))
-      ((eq? '|| (operator exp)) (or (mathValue (operand1 exp) state) (mathValue (operand2 exp) state)))
+      ((eq? '&& (operator exp)) (and (mathValue (operand1 exp) state return continue break throw) (mathValue (operand2 exp) state return continue break throw)))
+      ((eq? '|| (operator exp)) (or (mathValue (operand1 exp) state return continue break throw) (mathValue (operand2 exp) state return continue break throw)))
       ;boolean evaluation
-      ((eq? '== (operator exp)) (= (mathValue (operand1 exp) state) (mathValue (operand2 exp) state)))
-      ((eq? '<= (operator exp)) (<= (mathValue (operand1 exp) state) (mathValue (operand2 exp) state)))
-      ((eq? '>= (operator exp)) (>= (mathValue (operand1 exp) state) (mathValue (operand2 exp) state)))
-      ((eq? '<  (operator exp))  (< (mathValue (operand1 exp) state) (mathValue (operand2 exp) state)))
-      ((eq? '>  (operator exp))  (> (mathValue (operand1 exp) state) (mathValue (operand2 exp) state)))
+      ((eq? '== (operator exp)) (equal? (mathValue (operand1 exp) state return continue break throw) (mathValue (operand2 exp) state return continue break throw)))
+      ((eq? '<= (operator exp)) (<= (mathValue (operand1 exp) state return continue break throw) (mathValue (operand2 exp) state return continue break throw)))
+      ((eq? '>= (operator exp)) (>= (mathValue (operand1 exp) state return continue break throw) (mathValue (operand2 exp) state return continue break throw)))
+      ((eq? '<  (operator exp))  (< (mathValue (operand1 exp) state return continue break throw) (mathValue (operand2 exp) state return continue break throw)))
+      ((eq? '>  (operator exp))  (> (mathValue (operand1 exp) state return continue break throw) (mathValue (operand2 exp) state return continue break throw)))
       ;math evaluation
-      ((eq? '+ (operator exp)) (+ (mathValue (operand1 exp) state) (mathValue (operand2 exp) state)))
-      ((eq? '- (operator exp)) (- (mathValue (operand1 exp) state) (mathValue (operand2 exp) state)))
-      ((eq? '* (operator exp)) (* (mathValue (operand1 exp) state) (mathValue (operand2 exp) state)))
-      ((eq? '/ (operator exp)) (quotient (mathValue (operand1 exp) state) (mathValue (operand2 exp) state)))
-      ((eq? '% (operator exp)) (remainder (mathValue (operand1 exp) state) (mathValue (operand2 exp) state)))
+      ((eq? '+ (operator exp)) (+ (mathValue (operand1 exp) state return continue break throw) (mathValue (operand2 exp) state return continue break throw)))
+      ((eq? '- (operator exp)) (- (mathValue (operand1 exp) state return continue break throw) (mathValue (operand2 exp) state return continue break throw)))
+      ((eq? '* (operator exp)) (* (mathValue (operand1 exp) state return continue break throw) (mathValue (operand2 exp) state return continue break throw)))
+      ((eq? '/ (operator exp)) (quotient (mathValue (operand1 exp) state return continue break throw) (mathValue (operand2 exp) state return continue break throw)))
+      ((eq? '% (operator exp)) (remainder (mathValue (operand1 exp) state return continue break throw) (mathValue (operand2 exp) state return continue break throw)))
       (else (error "Unknown Operator")))))
 
 ;mathValue helpers
 (define operator car)
 (define operand1 cadr)
 (define operand2 caddr)
+(define getActualParams
+  (lambda (exp)
+    ;(logln "getActualParams exp" exp)
+    (cddr exp)))
 
 (define boolValue
   (lambda (bool)
@@ -284,12 +311,12 @@
 
 (define concatNamesAndValues list)
 
-;searchState takes a var and a state and returns associated data
+;searchState takes a named and a state and returns associated data or procedure
 (define searchState
   (lambda (var state)
     ;(display "search ") (display var)(display " in ")(display state) (newline)
     (cond
-      ((null? state) (error "Variable not in scope"))
+      ((null? state) (error "Variable/Function not in scope"))
       ((or (null? (nameBindings state)) (null? (valueBindings state))) (searchState var (nextLayers state)))
       ((eq? var (searchCurrentName state)) (searchCurrentValue state))
       ((null? (restOfNames (nameBindings state))) (searchState var (nextLayers state)))
@@ -386,5 +413,5 @@
     (error "Thrown statement not caught")))
 
 (define logln
-  (lambda (val)
-    (display val)(newline)))
+  (lambda (title val)
+    (display title)(display ":")(display val)(newline)))
