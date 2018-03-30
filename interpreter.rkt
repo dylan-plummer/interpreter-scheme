@@ -51,11 +51,11 @@
 (define generateFunctionState
   (lambda (name)
     (lambda (state)
-      state)))
+      (cons stateEmpty state))))
 (define runFunction
   (lambda (closure params state return continue break throw)
-    ;(logln "runFunction params" params) 
-    (stateBeginBlock (getFunctionBody closure)  (setActualParams params (getFormalParams closure) ((getStateFunc closure) state)  return continue break throw) return continue break throw)))
+    ;(logln "runFunction state" state) 
+    (statePopLayer (runBlock (getFunctionBody closure)  (setActualParams params (getFormalParams closure) ((getStateFunc closure) state)  return continue break throw) return continue break throw))))
 (define getFormalParams car)
 (define getStateFunc caddr)
 (define getFunctionBody cadr)
@@ -64,7 +64,7 @@
     ;(logln "setActualParams" actualParams)
     (if (null? actualParams)
       state
-      (setActualParams (cdr actualParams) (cdr formalParams) (addToState (car formalParams) (mathValue (car actualParams) state return continue break throw) state) return continue break throw))))
+      (setActualParams (cdr actualParams) (cdr formalParams) (addToState (car formalParams) (mathValue (car actualParams) (nextLayers state) return continue break throw) state) return continue break throw))))
 
 ;run helpers
 (define nextLines cdr)
@@ -81,7 +81,7 @@
       ((eq? (langValue statement) 'break) (break (statePopLayer state)))
       ((eq? (langValue statement) 'continue) (stateContinue state continue))
       ((eq? (langValue statement) 'try)  (stateTry statement state return continue break throw))
-      ((eq? (langValue statement) 'throw) (throw (mathValue (throwStatement statement) state) state return continue break throw))
+      ((eq? (langValue statement) 'throw) (throw (mathValue (throwStatement statement) state return continue break throw) state))
       ((eq? (langValue statement) 'finally) (runBlock (blockBody statement) state return continue break throw)) ;executes code within regardless of rest of the try block, has try block scope
       ((eq? (langValue statement) 'return) (returnValue (returnExp statement) state return continue break throw))
       ((eq? (langValue statement) 'while) (stateWhile (whileConditon statement) (whileBody statement) state return continue break throw))
@@ -104,16 +104,19 @@
 
 (define stateBeginBlock
   (lambda (expression state return continue break throw)
+    ;(logln "Begin block state" state)
     (runBlock expression (cons stateEmpty state) return continue break throw)))
 
 (define runBlock
   (lambda (block state return continue break throw)
+    ;(logln "runBlock" state)
     (if (null? block)
       state
       (runBlock (nextLines block) (evaluateStatement (currentLine block) state return continue break throw) return continue break throw))))
 ;gets rid of the first layer in state
 (define statePopLayer
   (lambda (state)
+    ;(logln "pop layer" state)
     (cdr state)))
 
 (define stateTry
@@ -234,13 +237,13 @@
       ((eq? exp 'false) #f)
       ((not (list? exp)) (searchState exp state)) ;not  number, yet not a list...must be a variable!
       ((number? (operator exp)) (error "Invalid expression")) ;the expression has no operator :(
+      ((eq? '!= (operator exp)) (not (= (mathValue (operand1 exp) state) (mathValue (operand2 exp) state) return continue break throw)))
+      ((eq? '! (operator exp)) (not (mathValue (operand1 exp) state return continue break throw)))
+      ((and (eq? (operator exp) '-) (null? (binaryExp exp))) (- 0 (mathValue (operand1 exp) state)))
       ((eq? (operator exp) 'funcall)
        (call/cc
         (lambda (newReturn)
           (runFunction (searchState (cadr exp) state) (getActualParams exp) state newReturn continue break throw))))
-      ((eq? '!= (operator exp)) (not (= (mathValue (operand1 exp) state) (mathValue (operand2 exp) state) return continue break throw)))
-      ((eq? '! (operator exp)) (not (mathValue (operand1 exp) state return continue break throw)))
-      ((and (eq? (operator exp) '-) (null? (binaryExp exp))) (- 0 (mathValue (operand1 exp) state)))
       ((or (eq? (mathValue (operand1 exp) state return continue break throw) 'unassigned) (eq? (mathValue(operand2 exp) state return continue break throw) 'unassigned)) (error "Variable has not been assigned a value"))
       ;&&/||/! evaluation, needs to be in format (operator bool bool) else bad logic
       ((eq? '&& (operator exp)) (and (mathValue (operand1 exp) state return continue break throw) (mathValue (operand2 exp) state return continue break throw)))
