@@ -1,6 +1,8 @@
 ;Dylan Plummer, Michael Tucci, Kevin Szmyd
 ;Interpreter part 1
 (require "functionParser.scm")
+(require rackunit)
+
 
 ;interpret takes a filename, calls the parser on that file,
 ;evaluates the parse tree returned by the parser, and returns
@@ -418,3 +420,24 @@
 (define logln
   (lambda (title val)
     (display title)(display ":")(display val)(newline)))
+
+(check-equal? (interpret "tests3/test1") 10 "Test 1")
+(check-equal? (interpret "tests3/test2") 14 "Test 2")
+(check-equal? (interpret "tests3/test3") 45 "Test 3")
+;(check-equal? (interpret "tests3/test4") 55 "Test 4")
+(check-equal? (interpret "tests3/test5") 1 "Test 5")
+(check-equal? (interpret "tests3/test6") 115 "Test 6")
+(check-equal? (interpret "tests3/test7") 'true "Test 7")
+(check-equal? (interpret "tests3/test8") 20 "Test 8")
+(check-equal? (interpret "tests3/test9") 24 "Test 9")
+(check-equal? (interpret "tests3/test10") 2 "Test 10")
+(check-equal? (interpret "tests3/test11") 35 "Test 11")
+(check-equal? (interpret "tests3/test12") error "Test 12")
+(check-equal? (interpret "tests3/test13") 90 "Test 13")
+(check-equal? (interpret "tests3/test14") 69 "Test 14")
+(check-equal? (interpret "tests3/test15") 87 "Test 15")
+(check-equal? (interpret "tests3/test16") 64 "Test 16")
+(check-equal? (interpret "tests3/test17") error "Test 17")
+(check-equal? (interpret "tests3/test18") 125 "Test 18")
+(check-equal? (interpret "tests3/test19") 100 "Test 19")
+(check-equal? (interpret "tests3/test20") 2000400 "Test 20")
