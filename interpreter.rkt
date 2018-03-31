@@ -81,9 +81,10 @@
   (lambda (actualParams formalParams state return continue break throw)
     ;(logln "setActualParams state" state)
     (cond
+      ((null? state) state)
       ((null? formalParams) (firstLayer state))
       ;((inLayer? (car formParams) (firstLayer state)) (setActualParams (cdr actualParams) (cdr formalParams) (replaceInState (car formalParams) (mathValue (car actualParams) (nextLayers state) return continue break throw) state) return continue break throw))
-      (else (setActualParams (cdr actualParams) (cdr formalParams) (addToState (car formalParams) (mathValue (car actualParams) state return continue break throw) state) return continue break throw)))))
+      (else (setActualParams (cdr actualParams) (cdr formalParams) (addToState (car formalParams) (mathValue (car actualParams) (nextLayers state) return continue break throw) state) return continue break throw)))))
  
       
 
@@ -137,7 +138,6 @@
 ;gets rid of the first layer in state
 (define statePopLayer
   (lambda (state)
-    (logln "pop layer" state)
     (cdr state)))
 
 (define stateTry
@@ -442,12 +442,12 @@
   (lambda (title val)
     (display title)(display ":")(display val)(newline)))
 
-;(check-equal? (interpret "tests3/test1") 10 "Test 1")
-;(check-equal? (interpret "tests3/test2") 14 "Test 2")
-;(check-equal? (interpret "tests3/test3") 45 "Test 3")
-;(check-equal? (interpret "tests3/test4") 55 "Test 4")
-;(check-equal? (interpret "tests3/test5") 1 "Test 5")
-;(check-equal? (interpret "tests3/test6") 115 "Test 6")
+(check-equal? (interpret "tests3/test1") 10 "Test 1")
+(check-equal? (interpret "tests3/test2") 14 "Test 2")
+(check-equal? (interpret "tests3/test3") 45 "Test 3")
+(check-equal? (interpret "tests3/test4") 5 "Test 4")
+(check-equal? (interpret "tests3/test5") 1 "Test 5")
+(check-equal? (interpret "tests3/test6") 115 "Test 6")
 ;(check-equal? (interpret "tests3/test7") 'true "Test 7")
 ;(check-equal? (interpret "tests3/test8") 20 "Test 8")
 ;(check-equal? (interpret "tests3/test9") 24 "Test 9")

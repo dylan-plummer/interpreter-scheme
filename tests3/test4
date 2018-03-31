@@ -8,5 +8,5 @@ function fib(a) {
 }
 
 function main() {
-  return fib(10);
+  return fib(5);
 }
