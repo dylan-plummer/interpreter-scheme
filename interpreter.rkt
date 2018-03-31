@@ -17,6 +17,7 @@
 ;next line, returning the new state
 (define run
   (lambda (parsetree state return continue break throw)
+    ;(logln "run" state)
     (if (null? parsetree)
         state
         (run (nextLines parsetree) (evaluateStatement (currentLine parsetree) state return continue break throw) return continue break throw))))
@@ -25,9 +26,11 @@
 ;which contains only functions and global variables
 (define stateGlobal
   (lambda (parsetree state return continue break throw)
-    (if (null? parsetree)
-        (runFunction (searchState 'main state) '() state return continue break throw)
-        (stateGlobal (nextLines parsetree) (evaluateGlobalStatement (currentLine parsetree) state return continue break throw) return continue break throw))))
+    (call/cc
+     (lambda (newReturn)
+       (if (null? parsetree)
+           (runFunction (searchState 'main state) NULL state newReturn continue break throw)
+           (stateGlobal (nextLines parsetree) (evaluateGlobalStatement (currentLine parsetree) state newReturn continue break throw) newReturn continue break throw))))))
 ;evaluateGlobalStatement takes a statement from the outermost layer of the program
 ;and either binds a function to its closure or adds a variable to the state
 (define evaluateGlobalStatement
@@ -47,22 +50,30 @@
 (define functionParams caddr)
 (define functionBody cadddr)
 
+;createClosure creates a list that contains a function's formal parameters,
+;body, and a function that generates the state to run the function in
 (define createClosure
   (lambda (params body name)
     (list params body (generateFunctionState name))))
+;generateFunctionState takes the name of a function and generates a function
+;that takes a state and returns the state where the scope of the function
+;is defined
 (define generateFunctionState
   (lambda (name)
     (lambda (state)
       (if (inLayer? name (firstLayer state))
-          (cons stateEmpty state)
+          state
           ((generateFunctionState name) (nextLayers state))))))
+
+(define generateFunctionState*
+  (lambda (name)
+    (lambda (state)
+      state)))
           
 (define runFunction
   (lambda (closure params state return continue break throw)
-    (call/cc
-     (lambda (newReturn)
-       (logln "runFunction state" state) 
-       (run (getFunctionBody closure)  (setActualParams params (getFormalParams closure) ((getStateFunc closure) state)  newReturn continue break throw) newReturn continue break throw)))))
+    ;(logln "runFunction state" state) 
+    (statePopLayer (run (getFunctionBody closure) (cons (setActualParams params (getFormalParams closure) (cons stateEmpty state) return continue break throw) ((getStateFunc closure) state)) return continue break throw))))
 (define getFormalParams car)
 (define getStateFunc caddr)
 (define getFunctionBody cadr)
@@ -70,7 +81,7 @@
   (lambda (actualParams formalParams state return continue break throw)
     ;(logln "setActualParams state" state)
     (cond
-      ((null? actualParams) state)
+      ((null? formalParams) (firstLayer state))
       ;((inLayer? (car formParams) (firstLayer state)) (setActualParams (cdr actualParams) (cdr formalParams) (replaceInState (car formalParams) (mathValue (car actualParams) (nextLayers state) return continue break throw) state) return continue break throw))
       (else (setActualParams (cdr actualParams) (cdr formalParams) (addToState (car formalParams) (mathValue (car actualParams) state return continue break throw) state) return continue break throw)))))
  
@@ -126,7 +137,7 @@
 ;gets rid of the first layer in state
 (define statePopLayer
   (lambda (state)
-    ;(logln "pop layer" state)
+    (logln "pop layer" state)
     (cdr state)))
 
 (define stateTry
@@ -251,7 +262,11 @@
       ((eq? '!= (operator exp)) (not (= (mathValue (operand1 exp) state) (mathValue (operand2 exp) state) return continue break throw)))
       ((eq? '! (operator exp)) (not (mathValue (operand1 exp) state return continue break throw)))
       ((and (eq? (operator exp) '-) (null? (binaryExp exp))) (- 0 (mathValue (operand1 exp) state)))
-      ((eq? (operator exp) 'funcall) (runFunction (searchState (cadr exp) state) (getActualParams exp) state return continue break throw))
+      ((eq? (operator exp) 'funcall)
+       (call/cc
+        (lambda (newReturn)
+          ;(logln exp state)
+          (runFunction (searchState (cadr exp) state) (getActualParams exp) state newReturn continue break throw))))
       ((or (eq? (mathValue (operand1 exp) state return continue break throw) 'unassigned) (eq? (mathValue(operand2 exp) state return continue break throw) 'unassigned)) (error "Variable has not been assigned a value"))
       ;&&/||/! evaluation, needs to be in format (operator bool bool) else bad logic
       ((eq? '&& (operator exp)) (and (mathValue (operand1 exp) state return continue break throw) (mathValue (operand2 exp) state return continue break throw)))
