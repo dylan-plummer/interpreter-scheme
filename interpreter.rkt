@@ -29,7 +29,7 @@
     (call/cc
      (lambda (newReturn)
        (if (null? parsetree)
-           (runFunction (searchState 'main state) NULL state newReturn continue break throw)
+           (returnFunctionValue (searchState 'main state) NULL state newReturn continue break throw)
            (stateGlobal (nextLines parsetree) (evaluateGlobalStatement (currentLine parsetree) state newReturn continue break throw) newReturn continue break throw))))))
 ;evaluateGlobalStatement takes a statement from the outermost layer of the program
 ;and either binds a function to its closure or adds a variable to the state
@@ -65,14 +65,24 @@
           state
           ((generateFunctionState name) (nextLayers state))))))
 
-(define generateFunctionState*
-  (lambda (name)
-    (lambda (state)
-      state)))
-          
-(define runFunction
+(define evalFunction
   (lambda (closure params state return continue break throw)
-    ;(logln "runFunction state" state) 
+    (runFunction (getFunctionBody closure) (cons (setActualParams params (getFormalParams closure) (cons stateEmpty state) return continue break throw) ((getStateFunc closure) state)) return continue break throw)))
+(define runFunction
+  (lambda (parsetree state return continue break throw)
+    (if (null? parsetree)
+        state
+        (runFunction (nextLines parsetree) (evaluateStatement (currentLine parsetree) state (functionStateReturn state) continue break throw) return continue break throw))))
+
+(define functionStateReturn
+  (lambda (state)
+    (lambda (v)
+      ;(logln v state)
+      state)))
+
+(define returnFunctionValue
+  (lambda (closure params state return continue break throw)
+    ;(logln "returnFunctionValue state" state)
     (statePopLayer (run (getFunctionBody closure) (cons (setActualParams params (getFormalParams closure) (cons stateEmpty state) return continue break throw) ((getStateFunc closure) state)) return continue break throw))))
 (define getFormalParams car)
 (define getStateFunc caddr)
@@ -85,8 +95,8 @@
       ((null? formalParams) (firstLayer state))
       ;((inLayer? (car formParams) (firstLayer state)) (setActualParams (cdr actualParams) (cdr formalParams) (replaceInState (car formalParams) (mathValue (car actualParams) (nextLayers state) return continue break throw) state) return continue break throw))
       (else (setActualParams (cdr actualParams) (cdr formalParams) (addToState (car formalParams) (mathValue (car actualParams) (nextLayers state) return continue break throw) state) return continue break throw)))))
- 
-      
+
+
 
 ;run helpers
 (define nextLines cdr)
@@ -99,6 +109,9 @@
     ;(logln "evaluateState state" state)
     (cond
       ((null? statement) state)
+      ((eq? (langValue statement) 'function) (bindFunctionClosure statement state))
+      ((eq? (langValue statement) 'funcall)
+          (evalFunction (searchState (funcName statement) state) (getActualParams statement) state return continue break throw))
       ((eq? (langValue statement) 'begin) (statePopLayer (stateBeginBlock (wholeBody statement) state return continue break throw)))
       ((eq? (langValue statement) 'break) (break (statePopLayer state)))
       ((eq? (langValue statement) 'continue) (stateContinue state continue))
@@ -119,6 +132,7 @@
 (define assignExp cdr)
 (define blockBody cadr)
 (define throwStatement cadr)
+(define funcName cadr)
 
 (define catchName (lambda (statement) (car (cadr statement))))
 (define wholeBody cdr)
@@ -259,14 +273,14 @@
       ((eq? exp 'false) #f)
       ((not (list? exp)) (searchState exp state)) ;not  number, yet not a list...must be a variable!
       ((number? (operator exp)) (error "Invalid expression")) ;the expression has no operator :(
-      ((eq? '!= (operator exp)) (not (= (mathValue (operand1 exp) state) (mathValue (operand2 exp) state) return continue break throw)))
+      ((eq? '!= (operator exp)) (not (= (mathValue (operand1 exp) state return continue break throw) (mathValue (operand2 exp) state return continue break throw))))
       ((eq? '! (operator exp)) (not (mathValue (operand1 exp) state return continue break throw)))
       ((and (eq? (operator exp) '-) (null? (binaryExp exp))) (- 0 (mathValue (operand1 exp) state)))
       ((eq? (operator exp) 'funcall)
        (call/cc
         (lambda (newReturn)
           ;(logln exp state)
-          (runFunction (searchState (cadr exp) state) (getActualParams exp) state newReturn continue break throw))))
+          (returnFunctionValue (searchState (cadr exp) state) (getActualParams exp) state newReturn continue break throw))))
       ((or (eq? (mathValue (operand1 exp) state return continue break throw) 'unassigned) (eq? (mathValue(operand2 exp) state return continue break throw) 'unassigned)) (error "Variable has not been assigned a value"))
       ;&&/||/! evaluation, needs to be in format (operator bool bool) else bad logic
       ((eq? '&& (operator exp)) (and (mathValue (operand1 exp) state return continue break throw) (mathValue (operand2 exp) state return continue break throw)))
@@ -442,12 +456,12 @@
   (lambda (title val)
     (display title)(display ":")(display val)(newline)))
 
-(check-equal? (interpret "tests3/test1") 10 "Test 1")
-(check-equal? (interpret "tests3/test2") 14 "Test 2")
-(check-equal? (interpret "tests3/test3") 45 "Test 3")
-(check-equal? (interpret "tests3/test4") 5 "Test 4")
-(check-equal? (interpret "tests3/test5") 1 "Test 5")
-(check-equal? (interpret "tests3/test6") 115 "Test 6")
+;(check-equal? (interpret "tests3/test1") 10 "Test 1")
+;(check-equal? (interpret "tests3/test2") 14 "Test 2")
+;(check-equal? (interpret "tests3/test3") 45 "Test 3")
+;(check-equal? (interpret "tests3/test4") 5 "Test 4")
+;(check-equal? (interpret "tests3/test5") 1 "Test 5")
+;(check-equal? (interpret "tests3/test6") 115 "Test 6")
 ;(check-equal? (interpret "tests3/test7") 'true "Test 7")
 ;(check-equal? (interpret "tests3/test8") 20 "Test 8")
 ;(check-equal? (interpret "tests3/test9") 24 "Test 9")
