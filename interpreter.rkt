@@ -11,16 +11,19 @@
   (lambda (filename)
     (call/cc
      (lambda (return)
-       (stateGlobal (parser filename) (list stateEmpty) return defaultContinue defaultBreak defaultThrow)))))
+       (let ((environment (stateGlobal (parser filename) (list stateEmpty) return defaultContinue defaultBreak defaultThrow)))
+         (returnFunctionValue (searchState 'main environment) NULL environment return defaultContinue defaultBreak defaultThrow))))))
 
 ;run evaluates the current parsetree statement and recursively runs the
 ;next line, returning the new state
 (define run
   (lambda (parsetree state return continue break throw)
-    ;(logln "run" state)
-    (if (null? parsetree)
-        state
-        (run (nextLines parsetree) (evaluateStatement (currentLine parsetree) state return continue break throw) return continue break throw))))
+    (call/cc
+     (lambda (newReturn)
+       ;(logln "run" state)
+       (if (null? parsetree)
+           state
+           (run (nextLines parsetree) (evaluateStatement (currentLine parsetree) state newReturn continue break throw) return continue break throw))))))
 
 ;stateGlobal takes in the parse tree and creates the base layer of the state
 ;which contains only functions and global variables
@@ -29,7 +32,8 @@
     (call/cc
      (lambda (newReturn)
        (if (null? parsetree)
-           (returnFunctionValue (searchState 'main state) NULL state newReturn continue break throw)
+           state
+           ;(returnFunctionValue (searchState 'main state) NULL state newReturn continue break throw)
            (stateGlobal (nextLines parsetree) (evaluateGlobalStatement (currentLine parsetree) state newReturn continue break throw) newReturn continue break throw))))))
 ;evaluateGlobalStatement takes a statement from the outermost layer of the program
 ;and either binds a function to its closure or adds a variable to the state
@@ -39,7 +43,7 @@
       ((null? statement) state)
       ((eq? (langValue statement) 'function) (bindFunctionClosure statement state))
       ((eq? (langValue statement) 'var) (stateDeclare (declareExp statement) state return continue break throw))
-      (else (error "Incorrect Syntax")))))
+      (else state))))
 
 ;bindFunctionClosure takes a statement of the form (function <name> <params> <body>)
 ;and returns the new state resulting from adding the function to the current state
@@ -58,12 +62,16 @@
 ;generateFunctionState takes the name of a function and generates a function
 ;that takes a state and returns the state where the scope of the function
 ;is defined
-(define generateFunctionState
+(define generateFunctionState*
   (lambda (name)
     (lambda (state)
       (if (inLayer? name (firstLayer state))
           state
           ((generateFunctionState name) (nextLayers state))))))
+(define generateFunctionState
+  (lambda (name)
+    (lambda (state)
+      state)))
 
 (define evalFunction
   (lambda (closure params state return continue break throw)
@@ -83,7 +91,7 @@
 (define returnFunctionValue
   (lambda (closure params state return continue break throw)
     ;(logln "returnFunctionValue state" state)
-    (statePopLayer (run (getFunctionBody closure) (cons (setActualParams params (getFormalParams closure) (cons stateEmpty state) return continue break throw) ((getStateFunc closure) state)) return continue break throw))))
+    (run (getFunctionBody closure) (cons (setActualParams params (getFormalParams closure) (cons stateEmpty state) return continue break throw) ((getStateFunc closure) state)) return continue break throw)))
 (define getFormalParams car)
 (define getStateFunc caddr)
 (define getFunctionBody cadr)
@@ -92,8 +100,8 @@
     ;(logln "setActualParams state" state)
     (cond
       ((null? state) state)
-      ((null? formalParams) (firstLayer state))
-      ;((inLayer? (car formParams) (firstLayer state)) (setActualParams (cdr actualParams) (cdr formalParams) (replaceInState (car formalParams) (mathValue (car actualParams) (nextLayers state) return continue break throw) state) return continue break throw))
+      ((null? actualParams) (firstLayer state))
+      ((inState? (car formalParams) state) (setActualParams (cdr actualParams) (cdr formalParams) (replaceInState (car formalParams) (mathValue (car actualParams) (nextLayers state) return continue break throw) state) return continue break throw))
       (else (setActualParams (cdr actualParams) (cdr formalParams) (addToState (car formalParams) (mathValue (car actualParams) (nextLayers state) return continue break throw) state) return continue break throw)))))
 
 
@@ -121,7 +129,9 @@
       ((eq? (langValue statement) 'return) (returnValue (returnExp statement) state return continue break throw))
       ((eq? (langValue statement) 'while) (stateWhile (whileConditon statement) (whileBody statement) state return continue break throw))
       ((eq? (langValue statement) 'var) (stateDeclare (declareExp statement) state return continue break throw))
-      ((eq? (langValue statement) '=) (stateAssign (assignExp statement) state return continue break throw))
+      ((eq? (langValue statement) '=)
+       (set-box! newState state)
+       (stateAssign (assignExp statement) state return continue break throw))
       ((eq? (langValue statement) 'if) (stateIf (ifCondition statement) (thenStatement statement) (elseStatement statement) state return continue break throw))
       (else (error "Incorrect syntax")))))
 
@@ -224,8 +234,16 @@
   (lambda (statement state return continue break throw)
     (cond
       ((null? statement) state)
-      (else (replaceInState (variable statement) (mathValue (assignmentExp statement) state return continue break throw) state)))))
+      ;((functionCall? (assignmentExp statement)) (replaceInState (variable statement) (mathValue (assignmentExp statement) (unbox newState) return continue break throw) (unbox newState)))
+      (else (replaceInState (variable statement) (mathValue (assignmentExp statement) state return continue break throw) (unbox newState))))))
 
+(define functionCall?
+  (lambda (exp)
+    ;(logln "functionCall?" exp)
+    (cond
+      ((null? exp) #f)
+      ((eq? (car exp) 'funcall) #t)
+      (else (functionCall? (cdr exp))))))
 ;assignment helpers
 (define assignmentExp cadr)
 (define variable car)
@@ -251,14 +269,15 @@
 (define whileConditon cadr)
 (define whileBody caddr)
 
+
 ;returnValue takes an expression and a state and returns the value of the expression
 ;as an integer or a boolean
 (define returnValue
   (lambda (expression state return continue break throw)
-    ;(logln expression (mathValue expression state  return continue break throw))
-    (cond
-      ((number? (mathValue expression state return continue break throw)) (return (mathValue expression state  return continue break throw)))
-      (else (return (boolValue (mathValue expression state return continue break throw)))))))
+    (set-box! newState state)
+      (cond
+        ((number? (mathValue expression state return continue break throw)) (return (mathValue expression state  return continue break throw)))
+        (else (return (boolValue (mathValue expression state return continue break throw)))))))
 
 
 ;mathValue takes an expression and returns it's mathematical value (integer or boolean)
@@ -277,10 +296,8 @@
       ((eq? '! (operator exp)) (not (mathValue (operand1 exp) state return continue break throw)))
       ((and (eq? (operator exp) '-) (null? (binaryExp exp))) (- 0 (mathValue (operand1 exp) state)))
       ((eq? (operator exp) 'funcall)
-       (call/cc
-        (lambda (newReturn)
-          ;(logln exp state)
-          (returnFunctionValue (searchState (cadr exp) state) (getActualParams exp) state newReturn continue break throw))))
+       ;(logln exp state)
+       (returnFunctionValue (searchState (cadr exp) state) (getActualParams exp) state return continue break throw))
       ((or (eq? (mathValue (operand1 exp) state return continue break throw) 'unassigned) (eq? (mathValue(operand2 exp) state return continue break throw) 'unassigned)) (error "Variable has not been assigned a value"))
       ;&&/||/! evaluation, needs to be in format (operator bool bool) else bad logic
       ((eq? '&& (operator exp)) (and (mathValue (operand1 exp) state return continue break throw) (mathValue (operand2 exp) state return continue break throw)))
@@ -317,6 +334,8 @@
 ;initial state, no variables declared or assigned, abstracted!
 (define stateEmpty
   (list (list) (list)))
+
+(define newState (box stateEmpty))
 
 ;bindings to the names of variables in the state
 (define nameBindings
@@ -364,6 +383,13 @@
 
 ;searchState abstraction
 (define restOfNames cdr)
+
+(define inState?
+  (lambda (var state)
+    (cond
+      ((null? state) #f)
+      ((inLayer? var (firstLayer state)) #t)
+      (else (inState? var (nextLayers state))))))
 
 (define inLayer?
   (lambda (var layer)
