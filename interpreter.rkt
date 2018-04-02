@@ -76,7 +76,7 @@
 
 (define evalFunction
   (lambda (closure params state return continue break throw)
-    (runFunction (getFunctionBody closure) (cons (setActualParams params (getFormalParams closure) (cons stateEmpty state) (cons stateEmpty state) state continue break throw) ((getStateFunc closure) state)) return continue break throw)))
+    (runFunction (getFunctionBody closure) (cons (setActualParams params (getFormalParams closure) state (cons stateEmpty state) state continue break throw) ((getStateFunc closure) state)) return continue break throw)))
 (define runFunction
   (lambda (parsetree state return continue break throw)
     (if (null? parsetree)
@@ -92,7 +92,7 @@
 (define returnFunctionValue
   (lambda (closure params state return continue break throw)
     ;(logln "returnFunctionValue state" state)
-    (run (getFunctionBody closure) (cons (setActualParams params (getFormalParams closure) (cons stateEmpty state) (cons stateEmpty state) return continue break throw) ((getStateFunc closure) state)) return continue break throw)))
+    (run (getFunctionBody closure) (cons (setActualParams params (getFormalParams closure) state (cons stateEmpty state) return continue break throw) ((getStateFunc closure) state)) return continue break throw)))
 
 (define actualParamValues
   (lambda (params state return continue break throw)
@@ -108,8 +108,9 @@
   (lambda (actualParams formalParams state funcState return continue break throw)
     ;(logln actualParams formalParams)
     (cond
+      ;((and (null? actualParams) (eq? (firstLayer funcState) stateEmpty)) (firstLayer (nextLayers funcState)))
       ((null? actualParams) (firstLayer funcState))
-      ((and (inState? (car actualParams) (nextLayers funcState)) (eq? (firstLayer funcState) stateEmpty))
+      ((and (inState? (car formalParams) (nextLayers funcState)) (eq? (firstLayer funcState) stateEmpty))
        (setActualParams (cdr actualParams) (cdr formalParams)
                         state
                         (replaceInState (car formalParams) (mathValue (car actualParams) funcState return continue break throw) state) return continue break throw))
