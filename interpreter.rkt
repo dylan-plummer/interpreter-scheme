@@ -39,6 +39,7 @@
 ;and either binds a function to its closure or adds a variable to the state
 (define evaluateGlobalStatement
   (lambda (statement state return continue break throw)
+    (set-box! newState state)
     (cond
       ((null? statement) state)
       ((eq? (langValue statement) 'function) (bindFunctionClosure statement state))
@@ -62,20 +63,20 @@
 ;generateFunctionState takes the name of a function and generates a function
 ;that takes a state and returns the state where the scope of the function
 ;is defined
-(define generateFunctionState*
+(define generateFunctionState
   (lambda (name)
     (lambda (state)
       (if (inLayer? name (firstLayer state))
           state
           ((generateFunctionState name) (nextLayers state))))))
-(define generateFunctionState
+(define generateFunctionState*
   (lambda (name)
     (lambda (state)
       state)))
 
 (define evalFunction
   (lambda (closure params state return continue break throw)
-    (runFunction (getFunctionBody closure) (cons (setActualParams params (getFormalParams closure) (cons stateEmpty state) return continue break throw) ((getStateFunc closure) state)) return continue break throw)))
+    (runFunction (getFunctionBody closure) (cons (setActualParams params (getFormalParams closure) (cons stateEmpty state) (cons stateEmpty state) state continue break throw) ((getStateFunc closure) state)) return continue break throw)))
 (define runFunction
   (lambda (parsetree state return continue break throw)
     (if (null? parsetree)
@@ -91,19 +92,33 @@
 (define returnFunctionValue
   (lambda (closure params state return continue break throw)
     ;(logln "returnFunctionValue state" state)
-    (run (getFunctionBody closure) (cons (setActualParams params (getFormalParams closure) (cons stateEmpty state) return continue break throw) ((getStateFunc closure) state)) return continue break throw)))
+    (run (getFunctionBody closure) (cons (setActualParams params (getFormalParams closure) (cons stateEmpty state) (cons stateEmpty state) return continue break throw) ((getStateFunc closure) state)) return continue break throw)))
+
+(define actualParamValues
+  (lambda (params state return continue break throw)
+    ;(logln params (mathValue (car params) state return continue break throw))
+    (if (null? params)
+        params
+        (cons (mathValue (car params) state return continue break throw) (actualParamValues (cdr params) state return continue break throw)))))
+    
 (define getFormalParams car)
 (define getStateFunc caddr)
 (define getFunctionBody cadr)
 (define setActualParams
-  (lambda (actualParams formalParams state return continue break throw)
-    ;(logln "setActualParams state" state)
+  (lambda (actualParams formalParams state funcState return continue break throw)
+    ;(logln actualParams formalParams)
     (cond
-      ((null? state) state)
-      ((null? actualParams) (firstLayer state))
-      ((inState? (car formalParams) state) (setActualParams (cdr actualParams) (cdr formalParams) (replaceInState (car formalParams) (mathValue (car actualParams) (nextLayers state) return continue break throw) state) return continue break throw))
-      (else (setActualParams (cdr actualParams) (cdr formalParams) (addToState (car formalParams) (mathValue (car actualParams) (nextLayers state) return continue break throw) state) return continue break throw)))))
-
+      ((null? actualParams) (firstLayer funcState))
+      ((and (inState? (car actualParams) (nextLayers funcState)) (eq? (firstLayer funcState) stateEmpty))
+       (setActualParams (cdr actualParams) (cdr formalParams)
+                        state
+                        (replaceInState (car formalParams) (mathValue (car actualParams) funcState return continue break throw) state) return continue break throw))
+      (else (setActualParams (cdr actualParams) (cdr formalParams) state (addToState (car formalParams) (mathValue (car actualParams) state return continue break throw) funcState) return continue break throw)))))
+      ;((eq? (firstLayer state) stateEmpty)
+      ;((not (null? (nextLayers state)))
+      ; (setActualParams (cdr actualParams) (cdr formalParams) (addToState (car formalParams) (mathValue (car actualParams) state return continue break throw) state) return continue break throw))
+      ;((inState? (car formalParams) state) (setActualParams (cdr actualParams) (cdr formalParams) (addToState (car formalParams) (car actualParams) state) return continue break throw))
+      ;(else (setActualParams (cdr actualParams) (cdr formalParams) (addToState (car formalParams) (mathValue (car actualParams) state return continue break throw) state) return continue break throw)))))
 
 
 ;run helpers
@@ -414,6 +429,7 @@
 ;with that variable's value replaced with the given value
 (define replaceInState
   (lambda (var val state)
+    ;(logln var state)
     ;recurse through layer, if it's empty, go to the next layer
     ;if variable found, replace it, otherwise keep going through layer
     (cond
@@ -482,14 +498,14 @@
   (lambda (title val)
     (display title)(display ":")(display val)(newline)))
 
-;(check-equal? (interpret "tests3/test1") 10 "Test 1")
-;(check-equal? (interpret "tests3/test2") 14 "Test 2")
-;(check-equal? (interpret "tests3/test3") 45 "Test 3")
-;(check-equal? (interpret "tests3/test4") 5 "Test 4")
-;(check-equal? (interpret "tests3/test5") 1 "Test 5")
-;(check-equal? (interpret "tests3/test6") 115 "Test 6")
-;(check-equal? (interpret "tests3/test7") 'true "Test 7")
-;(check-equal? (interpret "tests3/test8") 20 "Test 8")
+(check-equal? (interpret "tests3/test1") 10 "Test 1")
+(check-equal? (interpret "tests3/test2") 14 "Test 2")
+(check-equal? (interpret "tests3/test3") 45 "Test 3")
+(check-equal? (interpret "tests3/test4") 5 "Test 4")
+(check-equal? (interpret "tests3/test5") 1 "Test 5")
+(check-equal? (interpret "tests3/test6") 115 "Test 6")
+(check-equal? (interpret "tests3/test7") 'true "Test 7")
+(check-equal? (interpret "tests3/test8") 20 "Test 8")
 ;(check-equal? (interpret "tests3/test9") 24 "Test 9")
 ;(check-equal? (interpret "tests3/test10") 2 "Test 10")
 ;(check-equal? (interpret "tests3/test11") 35 "Test 11")
