@@ -1,7 +1,8 @@
 ;Dylan Plummer, Michael Tucci, Kevin Szmyd
 ;Interpreter part 1
+
 (require "functionParser.scm")
-(require rackunit)
+;(require rackunit) ;uncomment to run unit tests
 
 
 ;interpret takes a filename, calls the parser on that file,
@@ -20,7 +21,6 @@
   (lambda (parsetree state return continue break throw)
     (call/cc
      (lambda (newReturn)
-       ;(logln "run" state)
        (if (null? parsetree)
            state
            (run (nextLines parsetree) (evaluateStatement (currentLine parsetree) state newReturn continue break throw) return continue break throw))))))
@@ -33,8 +33,8 @@
      (lambda (newReturn)
        (if (null? parsetree)
            state
-           ;(returnFunctionValue (searchState 'main state) NULL state newReturn continue break throw)
            (stateGlobal (nextLines parsetree) (evaluateGlobalStatement (currentLine parsetree) state newReturn continue break throw) newReturn continue break throw))))))
+
 ;evaluateGlobalStatement takes a statement from the outermost layer of the program
 ;and either binds a function to its closure or adds a variable to the state
 (define evaluateGlobalStatement
@@ -44,6 +44,7 @@
       ((null? statement) state)
       ((eq? (langValue statement) 'function) (bindFunctionClosure statement state))
       ((eq? (langValue statement) 'var) (stateDeclare (declareExp statement) state return continue break throw))
+      ((eq? (langValue statement) '=) (stateAssign (assignExp statement) state return continue break throw))
       (else state))))
 
 ;bindFunctionClosure takes a statement of the form (function <name> <params> <body>)
@@ -51,15 +52,13 @@
 (define bindFunctionClosure
   (lambda (statement state)
     (addToState (functionName statement) (createClosure (functionParams statement) (functionBody statement) (functionName statement)) state)))
-(define functionName cadr)
-(define functionParams caddr)
-(define functionBody cadddr)
 
 ;createClosure creates a list that contains a function's formal parameters,
 ;body, and a function that generates the state to run the function in
 (define createClosure
   (lambda (params body name)
     (list params body (generateFunctionState name))))
+
 ;generateFunctionState takes the name of a function and generates a function
 ;that takes a state and returns the state where the scope of the function
 ;is defined
@@ -69,74 +68,76 @@
       (if (inLayer? name (firstLayer state))
           state
           ((generateFunctionState name) (nextLayers state))))))
-(define generateFunctionState*
-  (lambda (name)
-    (lambda (state)
-      state)))
 
+;evalFunction and runFunction evaluate a function and upon reaching the return continuation returns
+;the state instead of the returned value
 (define evalFunction
   (lambda (closure params state return continue break throw)
-    (runFunction (getFunctionBody closure) (cons (setActualParams params (getFormalParams closure) state (cons stateEmpty state) state continue break throw) ((getStateFunc closure) state)) return continue break throw)))
+    (runFunction (getFunctionBody closure) (cons (setActualParams params (getFormalParams closure) state (cons stateEmpty state) return continue break throw) ((getStateFunc closure) state)) return continue break throw)))
 (define runFunction
   (lambda (parsetree state return continue break throw)
     (if (null? parsetree)
         state
         (runFunction (nextLines parsetree) (evaluateStatement (currentLine parsetree) state (functionStateReturn state) continue break throw) return continue break throw))))
 
+;functionStateReturn replaces the return continuation when evaluating a function as a
+;standalone statement
 (define functionStateReturn
   (lambda (state)
     (lambda (v)
-      ;(logln v state)
       state)))
 
+;returnFunctionValue executes a function and returns its value
 (define returnFunctionValue
   (lambda (closure params state return continue break throw)
-    ;(logln "returnFunctionValue state" state)
-    (run (getFunctionBody closure) (cons (setActualParams params (getFormalParams closure) state (cons stateEmpty state) return continue break throw) ((getStateFunc closure) state)) return continue break throw)))
+    (run (getFunctionBody closure) (cons (setVariablesInScope state (setActualParams params (getFormalParams closure) state (cons stateEmpty state) return continue break throw)) ((getStateFunc closure) state)) return continue break throw)))
 
-(define actualParamValues
-  (lambda (params state return continue break throw)
-    ;(logln params (mathValue (car params) state return continue break throw))
-    (if (null? params)
-        params
-        (cons (mathValue (car params) state return continue break throw) (actualParamValues (cdr params) state return continue break throw)))))
-    
-(define getFormalParams car)
-(define getStateFunc caddr)
-(define getFunctionBody cadr)
+;setActualParams takes the function arguments and parameters and returns a layer
+;containing the parameters and their assigned values
 (define setActualParams
   (lambda (actualParams formalParams state funcState return continue break throw)
-    ;(logln actualParams formalParams)
     (cond
-      ;((and (null? actualParams) (eq? (firstLayer funcState) stateEmpty)) (firstLayer (nextLayers funcState)))
+      ((> (length actualParams) (length formalParams)) (error "Too many arguments!"))
+      ((< (length actualParams) (length formalParams)) (error "Not enough arguments!"))
+      ((and (null? actualParams) (eq? (firstLayer funcState) (firstLayer state))) (firstLayer (nextLayers funcState)))
       ((null? actualParams) (firstLayer funcState))
-      ((and (inState? (car formalParams) (nextLayers funcState)) (eq? (firstLayer funcState) stateEmpty))
+      ((eq? (firstLayer funcState) (firstLayer state)) (setActualParams actualParams formalParams state (nextLayers funcState) return continue break throw))
+      ((and (inState? (car formalParams) (nextLayers funcState)) (eq? (firstLayer funcState) (firstLayer state)))
        (setActualParams (cdr actualParams) (cdr formalParams)
                         state
                         (replaceInState (car formalParams) (mathValue (car actualParams) funcState return continue break throw) state) return continue break throw))
       (else (setActualParams (cdr actualParams) (cdr formalParams) state (addToState (car formalParams) (mathValue (car actualParams) state return continue break throw) funcState) return continue break throw)))))
-      ;((eq? (firstLayer state) stateEmpty)
-      ;((not (null? (nextLayers state)))
-      ; (setActualParams (cdr actualParams) (cdr formalParams) (addToState (car formalParams) (mathValue (car actualParams) state return continue break throw) state) return continue break throw))
-      ;((inState? (car formalParams) state) (setActualParams (cdr actualParams) (cdr formalParams) (addToState (car formalParams) (car actualParams) state) return continue break throw))
-      ;(else (setActualParams (cdr actualParams) (cdr formalParams) (addToState (car formalParams) (mathValue (car actualParams) state return continue break throw) state) return continue break throw)))))
 
+;setVariablesInScope takes the state when a function is called and a layer
+;containing the initialized actual parameters of the function and returns
+;a new layer containing all variables that should be in the scope of the function
+(define setVariablesInScope
+  (lambda (state paramLayer)
+    (cond
+      ((null? (nextLayers state)) paramLayer)
+      ((eq? (firstLayer (nextLayers state)) stateEmpty) paramLayer)
+      ((inLayer? 'main (firstLayer (nextLayers state))) paramLayer)
+      (else (setVariablesInScope (nextLayers state) (mergeLayers (firstLayer (nextLayers state)) paramLayer))))))
 
-;run helpers
-(define nextLines cdr)
-(define currentLine car)
+;mergeLayers merges two layers into one containing all values from both
+(define mergeLayers
+  (lambda (stateLayer paramLayer)
+    (cond
+      ((null? (car stateLayer)) paramLayer)
+      ((null? (car paramLayer)) stateLayer)
+      ((inLayer? (caar stateLayer) paramLayer) (mergeLayers (removeFromLayer (caar stateLayer) stateLayer) paramLayer))
+      (else (mergeLayers (removeFromLayer (caar stateLayer) stateLayer) (addToLayer (caar stateLayer) (car (cadr stateLayer)) paramLayer))))))
 
 ;evaluateStatement takes a statement and a state and returns the new state after
 ;evaluating the statement
 (define evaluateStatement
   (lambda (statement state return continue break throw)
-    ;(logln "evaluateState state" state)
     (cond
       ((null? statement) state)
       ((eq? (langValue statement) 'function) (bindFunctionClosure statement state))
       ((eq? (langValue statement) 'funcall)
           (evalFunction (searchState (funcName statement) state) (getActualParams statement) state return continue break throw))
-      ((eq? (langValue statement) 'begin) (statePopLayer (stateBeginBlock (wholeBody statement) state return continue break throw)))
+      ((eq? (langValue statement) 'begin) (stateBeginBlock (wholeBody statement) state return continue break throw))
       ((eq? (langValue statement) 'break) (break (statePopLayer state)))
       ((eq? (langValue statement) 'continue) (stateContinue state continue))
       ((eq? (langValue statement) 'try)  (stateTry statement state return continue break throw))
@@ -151,35 +152,21 @@
       ((eq? (langValue statement) 'if) (stateIf (ifCondition statement) (thenStatement statement) (elseStatement statement) state return continue break throw))
       (else (error "Incorrect syntax")))))
 
-;evaluateStatement helpers
-(define langValue car)
-(define declareExp cdr)
-(define returnExp cadr)
-(define assignExp cdr)
-(define blockBody cadr)
-(define throwStatement cadr)
-(define funcName cadr)
-
-(define catchName (lambda (statement) (car (cadr statement))))
-(define wholeBody cdr)
-
-
+;begins a block statement by creating a new layer on the state
+;and running the body
 (define stateBeginBlock
   (lambda (expression state return continue break throw)
-    ;(logln "Begin block state" state)
     (runBlock expression (cons stateEmpty state) return continue break throw)))
 
+;runs a block of code line by line and returns the state
 (define runBlock
   (lambda (block state return continue break throw)
-    ;(logln "runBlock" state)
     (if (null? block)
       state
       (runBlock (nextLines block) (evaluateStatement (currentLine block) state return continue break throw) return continue break throw))))
-;gets rid of the first layer in state
-(define statePopLayer
-  (lambda (state)
-    (cdr state)))
 
+;stateTry runs a try-catch-finally block by first checking which parts of the block are
+;present in the code, then running them
 (define stateTry
   (lambda (statement state return continue break throw)
     (cond
@@ -188,11 +175,8 @@
       ((null? (finallyBlock statement)) (tryCatchFinally (blockBody statement) (catchBody statement) NULL state return continue break throw)) ;no finally, try, catch
       (else (tryCatchFinally (blockBody statement) (catchBody statement) (finallyBlock statement) state return continue break throw)))))
 
-(define finallyBlock cdddr)
-(define catchBody caddr)
-
-(define NULL (list))
-
+;tryCatchFinally runs each section of a try-catch-finally block creating continuations along
+;the way
 (define tryCatchFinally
   (lambda (tryBody catchBody finallyBody state return continue break throw)
     (cond
@@ -200,18 +184,19 @@
        (call/cc
         (lambda (newThrow)
           (run tryBody state return continue break (lambda (val newState) (newThrow (stateCatch catchBody val newState return continue break throw)))))))
-      (else (runBlock finallyBody
+      (else (run finallyBody
                        (call/cc
                         (lambda (newThrow)
                           (run tryBody state return continue break (lambda (val newState) (newThrow (stateCatch catchBody val newState return continue break throw)))))) return continue break throw)))))
 
-(define stateCatch ;creates a new block and scope for catch body with the thrown variable
+ ;creates a new block and scope for catch body with the thrown variable
+(define stateCatch
   (lambda (body val state return continue break throw)
     (if (null? body)
       state
-      (runBlock (catchBody body) (addToState (catchValue body) val state) return continue break throw))))
-(define catchValue caadr)
+      (runBlock (catchBody body) (addToState (catchValue body) val (unbox newState)) return continue break throw))))
 
+;stateContinue calls the continue continuation and pops the layer of the loop
 (define stateContinue
   (lambda (state continue)
     (continue (statePopLayer state))))
@@ -224,16 +209,6 @@
     (if (mathValue condition state return continue break throw)
         (evaluateStatement statement state return continue break throw)
         (evaluateStatement else state return continue break throw))))
-
-;if helpers
-(define ifCondition cadr)
-(define thenStatement caddr)
-
-(define elseStatement
-  (lambda (statement)
-    (if (null? (cdddr statement))
-        '()
-        (cadddr statement))))
 
 ;stateDeclare takes a statement containing a variable and possibly an assignment
 ;and returns the new state with the variable declared
@@ -250,16 +225,8 @@
   (lambda (statement state return continue break throw)
     (cond
       ((null? statement) state)
-      ;((functionCall? (assignmentExp statement)) (replaceInState (variable statement) (mathValue (assignmentExp statement) (unbox newState) return continue break throw) (unbox newState)))
       (else (replaceInState (variable statement) (mathValue (assignmentExp statement) state return continue break throw) (unbox newState))))))
 
-(define functionCall?
-  (lambda (exp)
-    ;(logln "functionCall?" exp)
-    (cond
-      ((null? exp) #f)
-      ((eq? (car exp) 'funcall) #t)
-      (else (functionCall? (cdr exp))))))
 ;assignment helpers
 (define assignmentExp cadr)
 (define variable car)
@@ -272,6 +239,8 @@
      (lambda (newBreak)
        (stateWhileLoop condition body state return continue newBreak throw)))))
 
+;stateWhile loop executes the code body iteration by iteration creating
+;continue continuations until the loop condition is false
 (define stateWhileLoop
   (lambda (condition body state return continue break throw)
     (if (mathValue condition state return continue break throw)
@@ -280,11 +249,6 @@
                                           (evaluateStatement body state return newContinue break throw)))
                         return continue break throw)
         state)))
-
-;while helpers
-(define whileConditon cadr)
-(define whileBody caddr)
-
 
 ;returnValue takes an expression and a state and returns the value of the expression
 ;as an integer or a boolean
@@ -295,11 +259,9 @@
         ((number? (mathValue expression state return continue break throw)) (return (mathValue expression state  return continue break throw)))
         (else (return (boolValue (mathValue expression state return continue break throw)))))))
 
-
 ;mathValue takes an expression and returns it's mathematical value (integer or boolean)
 (define mathValue
   (lambda (exp state return continue break throw)
-    ;(logln "mathValue exp" exp)
     (cond
       ;null/error checks
       ((null? exp) exp)
@@ -312,7 +274,6 @@
       ((eq? '! (operator exp)) (not (mathValue (operand1 exp) state return continue break throw)))
       ((and (eq? (operator exp) '-) (null? (binaryExp exp))) (- 0 (mathValue (operand1 exp) state)))
       ((eq? (operator exp) 'funcall)
-       ;(logln exp state)
        (returnFunctionValue (searchState (cadr exp) state) (getActualParams exp) state return continue break throw))
       ((or (eq? (mathValue (operand1 exp) state return continue break throw) 'unassigned) (eq? (mathValue(operand2 exp) state return continue break throw) 'unassigned)) (error "Variable has not been assigned a value"))
       ;&&/||/! evaluation, needs to be in format (operator bool bool) else bad logic
@@ -332,48 +293,16 @@
       ((eq? '% (operator exp)) (remainder (mathValue (operand1 exp) state return continue break throw) (mathValue (operand2 exp) state return continue break throw)))
       (else (error "Unknown Operator")))))
 
-;mathValue helpers
-(define operator car)
-(define operand1 cadr)
-(define operand2 caddr)
-(define getActualParams
-  (lambda (exp)
-    ;(logln "getActualParams exp" exp)
-    (cddr exp)))
-
-(define boolValue
-  (lambda (bool)
-    (if bool 'true 'false)))
-
-(define binaryExp cddr)
-
-;initial state, no variables declared or assigned, abstracted!
-(define stateEmpty
-  (list (list) (list)))
-
-(define newState (box stateEmpty))
-
-;bindings to the names of variables in the state
-(define nameBindings
-  (lambda (state)
-    ;(display "names ")(display state) (newline)
-    (car (firstLayer state))))
-
-;bindings to the values of variables in the state
-(define valueBindings
-    (lambda (state)
-      (cadr (firstLayer state))))
-
-(define firstLayer car)
-(define nextLayers cdr)
-
 ;addToState takes a variable and data and adds it to a state
 (define addToState
   (lambda (var data state)
-    ;(display "add ") (display state) (newline)
     (if (null? state)
       (cons (concatNamesAndValues (list var) (list data)) (nextLayers state))
       (cons (concatNamesAndValues (addVarName var state) (addVarValue data state)) (nextLayers state)))))
+
+(define addToLayer
+  (lambda (var data layer)
+    (list (cons var (car layer)) (cons data (cadr layer)))))
 
 ;addToState helpers
 (define addVarName
@@ -389,7 +318,6 @@
 ;searchState takes a named and a state and returns associated data or procedure
 (define searchState
   (lambda (var state)
-    ;(logln var state)
     (cond
       ((null? state) (error "Variable/Function not in scope"))
       ((or (null? (nameBindings state)) (null? (valueBindings state))) (searchState var (nextLayers state)))
@@ -415,25 +343,14 @@
       ((eq? (caar layer) var) #t)
       (else (inLayer? var (list (cdr (car layer)) (cdr (cdr layer))))))))
 
-;searchState helpers
-(define searchNext cdr)
-
-(define searchCurrentName
-  (lambda (state)
-    (caar (firstLayer state))))
-
-(define searchCurrentValue
-  (lambda (state)
-    (caadr (firstLayer state))))
-
 ;replaceInstate takes a variable, a value, and a state and returns the new state
 ;with that variable's value replaced with the given value
 (define replaceInState
   (lambda (var val state)
-    ;(logln var state)
     ;recurse through layer, if it's empty, go to the next layer
     ;if variable found, replace it, otherwise keep going through layer
     (cond
+      ((null? state) (error "Variable not in scope"))
       ((inLayer? var (firstLayer state)) (cons (replaceInLayer var val (firstLayer state)) (nextLayers state)))
       (else (cons (firstLayer state) (replaceInState var val (nextLayers state)))))))
 
@@ -442,20 +359,15 @@
 ; where the given variable name is stored and replace its value, and return the new layer
 (define replaceInLayer
   (lambda (var val layer)
-    ;(display "replaceLayer ")(display var)(display " in ") (display layer) (newline)
     (replaceInLayer-cps var val (car layer) (cadr layer) (lambda (l1 l2) (list l1 l2)))))
 
 ; tail recursive helper for replaceInLayer
 (define replaceInLayer-cps
   (lambda (var val names values return)
-    ;(display "replaceLayer-cps ")(display var)(display " in ") (display names)(display values) (newline)
     (cond
       ((null? names) (return names values))
       ((equal? var (car names)) (return names (cons val (cdr values))))
       (else (replaceInLayer-cps var val (cdr names) (cdr values) (lambda (l1 l2) (return (cons (car names) l1) (cons (car values) l2))))))))
-
-;helper functions for replacing in layers
-
 
 ;removeFromState takes a var and removes it and returns the new state
 (define removeFromState
@@ -473,49 +385,120 @@
       ((eq? var (firstVar (firstBlock layer))) (list (remainingVars (firstBlock layer)) (remainingVars (secondBlock layer))))
       (else (list (cons (firstVar (firstBlock layer)) (firstVar (removeFromLayer var (nextVar layer)))) (cons (firstVar (secondBlock layer)) (secondBlock (removeFromLayer var (nextVar layer)))))))))
 
-;helper functions for layering
 (define firstBlock car)
 (define secondBlock cadr)
 (define firstVar car)
 (define remainingVars cdr)
+(define functionName cadr)
+(define functionParams caddr)
+(define functionBody cadddr)
+(define getFormalParams car)
+(define getStateFunc caddr)
+(define getFunctionBody cadr)
+(define nextLines cdr)
+(define currentLine car)
+(define langValue car)
+(define declareExp cdr)
+(define returnExp cadr)
+(define assignExp cdr)
+(define blockBody cadr)
+(define throwStatement cadr)
+(define funcName cadr)
+(define catchName (lambda (statement) (car (cadr statement))))
+(define wholeBody cdr)
+(define statePopLayer
+  (lambda (state)
+    (cdr state)))
+(define stateNewLayer
+  (lambda (state)
+    (cons stateEmpty state)))
+(define finallyBlock cdddr)
+(define catchBody caddr)
+(define NULL (list))
+(define catchValue caadr)
+(define ifCondition cadr)
+(define thenStatement caddr)
+(define elseStatement
+  (lambda (statement)
+    (if (null? (cdddr statement))
+        '()
+        (cadddr statement))))
+(define whileConditon cadr)
+(define whileBody caddr)
+(define operator car)
+(define operand1 cadr)
+(define operand2 caddr)
+(define getActualParams
+  (lambda (exp)
+    (cddr exp)))
+(define boolValue
+  (lambda (bool)
+    (if bool 'true 'false)))
+(define binaryExp cddr)
+;initial state, no variables declared or assigned, abstracted!
+(define stateEmpty
+  (list (list) (list)))
+(define newState (box stateEmpty))
+;bindings to the names of variables in the state
+(define nameBindings
+  (lambda (state)
+    (car (firstLayer state))))
+;bindings to the values of variables in the state
+(define valueBindings
+    (lambda (state)
+      (cadr (firstLayer state))))
+(define firstLayer car)
+(define nextLayers cdr)
+(define searchNext cdr)
+(define searchCurrentName
+  (lambda (state)
+    (caar (firstLayer state))))
 
+(define searchCurrentValue
+  (lambda (state)
+    (caadr (firstLayer state))))
 (define nextVar
   (lambda (layer)
     (list (remainingVars (firstBlock layer)) (remainingVars (secondBlock layer)))))
-
+(define listLength
+  (lambda (l n)
+    (cond
+      ((null? l) n)
+      (length (cdr l) (+ 1 n)))))
 (define defaultContinue
   (lambda (state)
     (error "Can't call continue here")))
-
 (define defaultBreak
   (lambda (state)
     (error "Can't call break here")))
-
 (define defaultThrow
   (lambda (val state)
     (error "Thrown statement not caught")))
-
 (define logln
   (lambda (title val)
     (display title)(display ":")(display val)(newline)))
 
-;(check-equal? (interpret "tests3/test1") 10 "Test 1")
-;(check-equal? (interpret "tests3/test2") 14 "Test 2")
-;(check-equal? (interpret "tests3/test3") 45 "Test 3")
-;(check-equal? (interpret "tests3/test4") 5 "Test 4")
-;(check-equal? (interpret "tests3/test5") 1 "Test 5")
-;(check-equal? (interpret "tests3/test6") 115 "Test 6")
-;(check-equal? (interpret "tests3/test7") 'true "Test 7")
-;(check-equal? (interpret "tests3/test8") 20 "Test 8")
-;(check-equal? (interpret "tests3/test9") 24 "Test 9")
-;(check-equal? (interpret "tests3/test10") 2 "Test 10")
-;(check-equal? (interpret "tests3/test11") 35 "Test 11")
-;(check-equal? (interpret "tests3/test12") error "Test 12")
-;(check-equal? (interpret "tests3/test13") 90 "Test 13")
-;(check-equal? (interpret "tests3/test14") 69 "Test 14")
-;(check-equal? (interpret "tests3/test15") 87 "Test 15")
-;(check-equal? (interpret "tests3/test16") 64 "Test 16")
-;(check-equal? (interpret "tests3/test17") error "Test 17")
-;(check-equal? (interpret "tests3/test18") 125 "Test 18")
-;(check-equal? (interpret "tests3/test19") 100 "Test 19")
-;(check-equal? (interpret "tests3/test20") 2000400 "Test 20")
+(define unitTests
+  (lambda ()
+    (logln "Starting tests..." 0)
+    (check-equal? (interpret "tests3/test1") 10 "Test 1")
+    (check-equal? (interpret "tests3/test2") 14 "Test 2")
+    (check-equal? (interpret "tests3/test3") 45 "Test 3")
+    (check-equal? (interpret "tests3/test4") 5 "Test 4")
+    (check-equal? (interpret "tests3/test5") 1 "Test 5")
+    (check-equal? (interpret "tests3/test6") 115 "Test 6")
+    (check-equal? (interpret "tests3/test7") 'true "Test 7")
+    (check-equal? (interpret "tests3/test8") 20 "Test 8")
+    (check-equal? (interpret "tests3/test9") 24 "Test 9")
+    (check-equal? (interpret "tests3/test10") 2 "Test 10")
+    (check-equal? (interpret "tests3/test11") 35 "Test 11")
+    ;(check-equal? (interpret "tests3/test12") error "Test 12")
+    (check-equal? (interpret "tests3/test13") 90 "Test 13")
+    (check-equal? (interpret "tests3/test14") 69 "Test 14")
+    ;(check-equal? (interpret "tests3/test15") 87 "Test 15")
+    (check-equal? (interpret "tests3/test16") 64 "Test 16")
+    ;(check-equal? (interpret "tests3/test17") error "Test 17")
+    (check-equal? (interpret "tests3/test18") 125 "Test 18")
+    (check-equal? (interpret "tests3/test19") 100 "Test 19")
+    (check-equal? (interpret "tests3/test20") 2000400 "Test 20")
+    (logln "Tests Complete" 1)))
