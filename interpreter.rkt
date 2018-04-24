@@ -1,8 +1,8 @@
 ;Dylan Plummer, Michael Tucci, Kevin Szmyd
 ;Interpreter part 1
 
-(require "functionParser.scm")
-;(require rackunit) ;uncomment to run unit tests
+(require "classParser.scm")
+(require rackunit) ;uncomment to run unit tests
 
 
 ;interpret takes a filename, calls the parser on that file,
