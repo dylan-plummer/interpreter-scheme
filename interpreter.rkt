@@ -9,25 +9,31 @@
 ;evaluates the parse tree returned by the parser, and returns
 ;the proper value
 (define interpret
-  (lambda (filename class)
+  (lambda (filename classname)
     (call/cc
      (lambda (return)
        (let ((environment (stateGlobal (parser filename) (list stateEmpty) return defaultContinue defaultBreak defaultThrow)))
-         (runMainInClass (searchState class environment) environment return defaultContinue defaultBreak defaultThrow))))))
+         (runMainInClass (searchState classname environment) classname environment return defaultContinue defaultBreak defaultThrow))))))
 
 
-;(define runMainInClass
-;  (lambda (classClosure state return continue break throw)
+(define runMainInClass
+  (lambda (classClosure className state return continue break throw)
+    (logln classClosure state)
+    (call/cc
+     (lambda (newReturn)
+       (returnFunctionValue (searchState 'main (list (classMethods classClosure))) NULL className state newReturn continue break throw)))))
+
+(define classMethods car)
 
 ;run evaluates the current parsetree statement and recursively runs the
 ;next line, returning the new state
 (define run
-  (lambda (parsetree state return continue break throw)
+  (lambda (parsetree type state return continue break throw)
     (call/cc
      (lambda (newReturn)
        (if (null? parsetree)
            state
-           (run (nextLines parsetree) (evaluateStatement (currentLine parsetree) state newReturn continue break throw) return continue break throw))))))
+           (run (nextLines parsetree) type (evaluateStatement (currentLine parsetree) type state newReturn continue break throw) return continue break throw))))))
 
 (define stateGlobal
   (lambda (parsetree state return continue break throw)
@@ -41,8 +47,8 @@
     (logln statement state)
     (cond
       ((null? statement) state)
-      ((and (eq? (langValue statement) 'class) (null? (caddr statement)) (createClassClosure (className statement) NULL (classBody statement) state)))
-      ((and (eq? (langValue statement) 'class) (eq? (caaddr statement) 'extends)) (createClassClosure (className statement) (searchState (superClass statement) state) (classBody statement) state))
+      ((and (eq? (langValue statement) 'class) (null? (caddr statement)) (addToState (className statement) (createClassClosure NULL (classBody statement) state) state)))
+      ((and (eq? (langValue statement) 'class) (eq? (caaddr statement) 'extends)) (addToState (className statement) (createClassClosure (searchState (superClass statement) state) (classBody statement) state) state))
       (else state))))
 
 (define className cadr)
@@ -56,17 +62,16 @@
 ;the superclass (closure?)
 ;the constructors (not inherited)
 (define createClassClosure
-  (lambda (name super body state)
-  (logln name body)
+  (lambda (super body state)
+  (logln "Closure from " body)
     (cond
-      ((null? name) (error "No class name"))
       ((null? super) (list (getClassMethods body stateEmpty) (getClassFields body stateEmpty) NULL)) ;create new class
       (else ((list (getClassMethods body stateEmpty) (getClassFields body stateEmpty) (searchState super state))))))) ;class extends
 
 ;((var x 5) (var y 10) (static-function main () ((var a (new A)) (return (+ (dot a x) (dot a y))))))
 (define getClassFields
   (lambda (body state)
-  (logln body state)
+  (logln "Current fields" state)
     (cond
       ((null? body) state)
       ((eq? (caar body) 'var) (getClassFields (cdr body) (addToLayer (cadr (car body)) (caddr (car body)) state)))
@@ -75,7 +80,7 @@
 
 (define getClassMethods
   (lambda (body state)
-  (logln body state)
+  (logln "Current methods" state)
     (cond
       ((null? body) state)
       ((or (eq? (caar body) 'function) (eq? (caar body) 'static-function)) (getClassMethods (cdr body) (addToLayer (cadr (car body)) (createFunctionClosure (functionParams (car body)) (functionBody (car body)) (functionName (car body))) state)))
@@ -86,8 +91,8 @@
 ;field values (in reverse order)
 ;(define createInstanceClosure
 
-;stateClass takes in the parse tree and creates the base layer of the state
-;which contains only functions and global variables
+;stateClass takes in the parse tree and creates the base layer of the class state
+;which contains only functions and class fields
 (define stateClass
   (lambda (parsetree state return continue break throw)
     (call/cc
@@ -126,9 +131,10 @@
 (define generateFunctionState
   (lambda (name)
     (lambda (state)
-      (if (inLayer? name (firstLayer state))
-          state
-          ((generateFunctionState name) (nextLayers state))))))
+      (cond
+        ((null? (nextLayers state)) state)
+        ((inLayer? name (firstLayer state)) state)
+        (else ((generateFunctionState name) (nextLayers state)))))))
 
 ;evalFunction and runFunction evaluate a function and upon reaching the return continuation returns
 ;the state instead of the returned value
@@ -150,8 +156,8 @@
 
 ;returnFunctionValue executes a function and returns its value
 (define returnFunctionValue
-  (lambda (closure params state return continue break throw)
-    (run (getFunctionBody closure) (cons (setVariablesInScope state (setActualParams params (getFormalParams closure) state (cons stateEmpty state) return continue break throw)) ((getStateFunc closure) state)) return continue break throw)))
+  (lambda (closure params state return continue break throw type)
+    (run (getFunctionBody closure) type (cons (setVariablesInScope state (setActualParams params (getFormalParams closure) state (cons stateEmpty state) return continue break throw)) ((getStateFunc closure) state)) return continue break throw)))
 
 ;setActualParams takes the function arguments and parameters and returns a layer
 ;containing the parameters and their assigned values
@@ -192,7 +198,7 @@
 ;evaluateStatement takes a statement and a state and returns the new state after
 ;evaluating the statement
 (define evaluateStatement
-  (lambda (statement state return continue break throw)
+  (lambda (statement state type return continue break throw)
     (cond
       ((null? statement) state)
       ((eq? (langValue statement) 'function) (bindFunctionClosure statement state))
@@ -376,9 +382,11 @@
 
 (define concatNamesAndValues list)
 
-;searchState takes a named and a state and returns associated data or procedure
+;searchState takes a name and a state and returns associated data or procedure
 (define searchState
   (lambda (var state)
+    (logln var state)
+    (logln var (searchCurrentName state))
     (cond
       ((null? state) (error "Variable/Function not in scope"))
       ((or (null? (nameBindings state)) (null? (valueBindings state))) (searchState var (nextLayers state)))
