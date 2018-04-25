@@ -9,11 +9,15 @@
 ;evaluates the parse tree returned by the parser, and returns
 ;the proper value
 (define interpret
-  (lambda (filename)
+  (lambda (filename class)
     (call/cc
      (lambda (return)
        (let ((environment (stateGlobal (parser filename) (list stateEmpty) return defaultContinue defaultBreak defaultThrow)))
-         (returnFunctionValue (searchState 'main environment) NULL environment return defaultContinue defaultBreak defaultThrow))))))
+         (runMainInClass (searchState class environment) environment return defaultContinue defaultBreak defaultThrow))))))
+
+
+;(define runMainInClass
+;  (lambda (classClosure state return continue break throw)
 
 ;run evaluates the current parsetree statement and recursively runs the
 ;next line, returning the new state
@@ -25,19 +29,76 @@
            state
            (run (nextLines parsetree) (evaluateStatement (currentLine parsetree) state newReturn continue break throw) return continue break throw))))))
 
-;stateGlobal takes in the parse tree and creates the base layer of the state
-;which contains only functions and global variables
 (define stateGlobal
+  (lambda (parsetree state return continue break throw)
+    (if (null? parsetree)
+      state
+      (stateGlobal (nextLines parsetree) (evaluateGlobalStatement (currentLine parsetree) state return continue break throw) return continue break throw))))
+
+;(class B (extends A)  body)
+(define evaluateGlobalStatement
+  (lambda (statement state return continue break throw)
+    (logln statement state)
+    (cond
+      ((null? statement) state)
+      ((and (eq? (langValue statement) 'class) (null? (caddr statement)) (createClassClosure (className statement) NULL (classBody statement) state)))
+      ((and (eq? (langValue statement) 'class) (eq? (caaddr statement) 'extends)) (createClassClosure (className statement) (searchState (superClass statement) state) (classBody statement) state))
+      (else state))))
+
+(define className cadr)
+(define superClass
+  (lambda (exp)
+    (car (caddr))))
+(define classBody cadddr)
+
+;a class closure stores the methods of the class and its inherited methods,
+;the fields (static field names and values, instance field names),
+;the superclass (closure?)
+;the constructors (not inherited)
+(define createClassClosure
+  (lambda (name super body state)
+  (logln name body)
+    (cond
+      ((null? name) (error "No class name"))
+      ((null? super) (list (getClassMethods body stateEmpty) (getClassFields body stateEmpty) NULL)) ;create new class
+      (else ((list (getClassMethods body stateEmpty) (getClassFields body stateEmpty) (searchState super state))))))) ;class extends
+
+;((var x 5) (var y 10) (static-function main () ((var a (new A)) (return (+ (dot a x) (dot a y))))))
+(define getClassFields
+  (lambda (body state)
+  (logln body state)
+    (cond
+      ((null? body) state)
+      ((eq? (caar body) 'var) (getClassFields (cdr body) (addToLayer (cadr (car body)) (caddr (car body)) state)))
+      (else (getClassFields (cdr body) state)))))
+
+
+(define getClassMethods
+  (lambda (body state)
+  (logln body state)
+    (cond
+      ((null? body) state)
+      ((or (eq? (caar body) 'function) (eq? (caar body) 'static-function)) (getClassMethods (cdr body) (addToLayer (cadr (car body)) (createFunctionClosure (functionParams (car body)) (functionBody (car body)) (functionName (car body))) state)))
+      (else (getClassMethods (cdr body) state)))))
+
+
+;an instance closure contains the class (closure) and the instance
+;field values (in reverse order)
+;(define createInstanceClosure
+
+;stateClass takes in the parse tree and creates the base layer of the state
+;which contains only functions and global variables
+(define stateClass
   (lambda (parsetree state return continue break throw)
     (call/cc
      (lambda (newReturn)
        (if (null? parsetree)
            state
-           (stateGlobal (nextLines parsetree) (evaluateGlobalStatement (currentLine parsetree) state newReturn continue break throw) newReturn continue break throw))))))
+           (stateClass (nextLines parsetree) (evaluateClassStatement (currentLine parsetree) state newReturn continue break throw) newReturn continue break throw))))))
 
-;evaluateGlobalStatement takes a statement from the outermost layer of the program
+;evaluateClassStatement takes a statement from the outermost layer of the program
 ;and either binds a function to its closure or adds a variable to the state
-(define evaluateGlobalStatement
+(define evaluateClassStatement
   (lambda (statement state return continue break throw)
     (set-box! newState state)
     (cond
@@ -51,11 +112,11 @@
 ;and returns the new state resulting from adding the function to the current state
 (define bindFunctionClosure
   (lambda (statement state)
-    (addToState (functionName statement) (createClosure (functionParams statement) (functionBody statement) (functionName statement)) state)))
+    (addToState (functionName statement) (createFunctionClosure (functionParams statement) (functionBody statement) (functionName statement)) state)))
 
-;createClosure creates a list that contains a function's formal parameters,
+;createFunctionClosure creates a list that contains a function's formal parameters,
 ;body, and a function that generates the state to run the function in
-(define createClosure
+(define createFunctionClosure
   (lambda (params body name)
     (list params body (generateFunctionState name))))
 
