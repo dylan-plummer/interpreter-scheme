@@ -16,12 +16,13 @@
          (runMainInClass (searchState classname environment) classname environment return defaultContinue defaultBreak defaultThrow))))))
 
 
+; returnFunctionValue takes(lambda (closure params state return continue break throw type)
 (define runMainInClass
   (lambda (classClosure className state return continue break throw)
     (logln classClosure state)
     (call/cc
      (lambda (newReturn)
-       (returnFunctionValue (searchState 'main (list (classMethods classClosure))) NULL className state newReturn continue break throw)))))
+       (returnFunctionValue (searchState 'main (list (classMethods classClosure))) NULL state newReturn continue break throw className)))))
 
 (define classMethods car)
 
@@ -33,7 +34,7 @@
      (lambda (newReturn)
        (if (null? parsetree)
            state
-           (run (nextLines parsetree) type (evaluateStatement (currentLine parsetree) type state newReturn continue break throw) return continue break throw))))))
+           (run (nextLines parsetree) type (evaluateStatement (currentLine parsetree) state type newReturn continue break throw) return continue break throw))))))
 
 (define stateGlobal
   (lambda (parsetree state return continue break throw)
@@ -47,7 +48,7 @@
     (logln statement state)
     (cond
       ((null? statement) state)
-      ((and (eq? (langValue statement) 'class) (null? (caddr statement)) (addToState (className statement) (createClassClosure NULL (classBody statement) state) state)))
+      ((and (eq? (langValue statement) 'class) (null? (caddr statement)) (addToState (className statement) (createClassClosure (className statement) NULL (classBody statement) state) state)))
       ((and (eq? (langValue statement) 'class) (eq? (caaddr statement) 'extends)) (addToState (className statement) (createClassClosure (searchState (superClass statement) state) (classBody statement) state) state))
       (else state))))
 
@@ -62,11 +63,11 @@
 ;the superclass (closure?)
 ;the constructors (not inherited)
 (define createClassClosure
-  (lambda (super body state)
+  (lambda (name super body state)
   (logln "Closure from " body)
     (cond
-      ((null? super) (list (getClassMethods body stateEmpty) (getClassFields body stateEmpty) NULL)) ;create new class
-      (else ((list (getClassMethods body stateEmpty) (getClassFields body stateEmpty) (searchState super state))))))) ;class extends
+      ((null? super) (list (getClassMethods name body stateEmpty) (getClassFields body stateEmpty) NULL)) ;create new class
+      (else ((list (getClassMethods name body stateEmpty) (getClassFields body stateEmpty) (searchState super state))))))) ;class extends
 
 ;((var x 5) (var y 10) (static-function main () ((var a (new A)) (return (+ (dot a x) (dot a y))))))
 (define getClassFields
@@ -79,11 +80,11 @@
 
 
 (define getClassMethods
-  (lambda (body state)
+  (lambda (name body state)
   (logln "Current methods" state)
     (cond
       ((null? body) state)
-      ((or (eq? (caar body) 'function) (eq? (caar body) 'static-function)) (getClassMethods (cdr body) (addToLayer (cadr (car body)) (createFunctionClosure (functionParams (car body)) (functionBody (car body)) (functionName (car body))) state)))
+      ((or (eq? (caar body) 'function) (eq? (caar body) 'static-function)) (getClassMethods name (cdr body) (addToLayer (cadr (car body)) (createFunctionClosure (functionParams (car body)) (functionBody (car body)) (functionName (car body)) name) state)))
       (else (getClassMethods (cdr body) state)))))
 
 
@@ -116,14 +117,14 @@
 ;bindFunctionClosure takes a statement of the form (function <name> <params> <body>)
 ;and returns the new state resulting from adding the function to the current state
 (define bindFunctionClosure
-  (lambda (statement state)
-    (addToState (functionName statement) (createFunctionClosure (functionParams statement) (functionBody statement) (functionName statement)) state)))
+  (lambda (statement classname state)
+    (addToState (functionName statement) (createFunctionClosure (functionParams statement) (functionBody statement) (functionName statement) classname) state)))
 
 ;createFunctionClosure creates a list that contains a function's formal parameters,
 ;body, and a function that generates the state to run the function in
 (define createFunctionClosure
-  (lambda (params body name)
-    (list params body (generateFunctionState name))))
+  (lambda (params body name classname)
+    (list params body (generateFunctionState name) (generateFunctionClass classname))))
 
 ;generateFunctionState takes the name of a function and generates a function
 ;that takes a state and returns the state where the scope of the function
@@ -135,6 +136,11 @@
         ((null? (nextLayers state)) state)
         ((inLayer? name (firstLayer state)) state)
         (else ((generateFunctionState name) (nextLayers state)))))))
+
+(define generateFunctionClass
+  (lambda (classname)
+    (lambda (state)
+      (searchState classname state))))
 
 ;evalFunction and runFunction evaluate a function and upon reaching the return continuation returns
 ;the state instead of the returned value
@@ -163,6 +169,7 @@
 ;containing the parameters and their assigned values
 (define setActualParams
   (lambda (actualParams formalParams state funcState return continue break throw)
+    (logln actualParams state)
     (cond
       ((> (length actualParams) (length formalParams)) (error "Too many arguments!"))
       ((< (length actualParams) (length formalParams)) (error "Not enough arguments!"))
@@ -201,7 +208,7 @@
   (lambda (statement state type return continue break throw)
     (cond
       ((null? statement) state)
-      ((eq? (langValue statement) 'function) (bindFunctionClosure statement state))
+      ((eq? (langValue statement) 'function) (bindFunctionClosure statement type state))
       ((eq? (langValue statement) 'funcall)
           (evalFunction (searchState (funcName statement) state) (getActualParams statement) state return continue break throw))
       ((eq? (langValue statement) 'begin) (stateBeginBlock (wholeBody statement) state return continue break throw))
