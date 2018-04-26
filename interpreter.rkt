@@ -19,7 +19,6 @@
 ; returnFunctionValue takes(lambda (closure params state return continue break throw type)
 (define runMainInClass
   (lambda (classClosure className state return continue break throw)
-    (logln classClosure state)
     (call/cc
      (lambda (newReturn)
        (returnFunctionValue (searchState 'main (list (classMethods classClosure))) NULL state newReturn continue break throw className)))))
@@ -45,7 +44,6 @@
 ;(class B (extends A)  body)
 (define evaluateGlobalStatement
   (lambda (statement state return continue break throw)
-    (logln statement state)
     (cond
       ((null? statement) state)
       ((and (eq? (langValue statement) 'class) (null? (caddr statement)) (addToState (className statement) (createClassClosure (className statement) NULL (classBody statement) state) state)))
@@ -84,7 +82,8 @@
   (logln "Current methods" state)
     (cond
       ((null? body) state)
-      ((or (eq? (caar body) 'function) (eq? (caar body) 'static-function)) (getClassMethods name (cdr body) (addToLayer (cadr (car body)) (createFunctionClosure (functionParams (car body)) (functionBody (car body)) (functionName (car body)) name) state)))
+      ((eq? (caar body) 'static-function) (getClassMethods name (cdr body) (addToLayer (cadr (car body)) (createFunctionClosure (functionParams (car body)) (functionBody (car body)) (functionName (car body)) name) state)))
+      ((eq? (caar body) 'function) (getClassMethods name (cdr body) (addToLayer (cadr (car body)) (createFunctionClosure (cons 'this (functionParams (car body))) (functionBody (car body)) (functionName (car body)) name) state)))
       (else (getClassMethods (cdr body) state)))))
 
 
@@ -108,17 +107,17 @@
      (lambda (newReturn)
        (if (null? parsetree)
            state
-           (stateClass (nextLines parsetree) (evaluateClassStatement (currentLine parsetree) state newReturn continue break throw) newReturn continue break throw))))))
+           (stateClass (nextLines parsetree) (evaluateClassStatement (currentLine parsetree) state newReturn continue break throw type) newReturn continue break throw))))))
 
 ;evaluateClassStatement takes a statement from the outermost layer of the program
 ;and either binds a function to its closure or adds a variable to the state
 (define evaluateClassStatement
-  (lambda (statement state return continue break throw)
+  (lambda (statement state return continue break throw type)
     (set-box! newState state)
     (cond
       ((null? statement) state)
       ((eq? (langValue statement) 'function) (bindFunctionClosure statement state))
-      ((eq? (langValue statement) 'var) (stateDeclare (declareExp statement) state return continue break throw))
+      ((eq? (langValue statement) 'var) (stateDeclare (declareExp statement) state return continue break throw type))
       ((eq? (langValue statement) '=) (stateAssign (assignExp statement) state return continue break throw))
       (else state))))
 
@@ -126,12 +125,13 @@
 ;and returns the new state resulting from adding the function to the current state
 (define bindFunctionClosure
   (lambda (statement classname state)
-    (addToState (functionName statement) (createFunctionClosure (functionParams statement) (functionBody statement) (functionName statement) classname) state)))
+    (addToState (functionName statement) (createFunctionClosure (cons 'this (functionParams statement)) (functionBody statement) (functionName statement) classname) state)))
 
 ;createFunctionClosure creates a list that contains a function's formal parameters,
 ;body, and a function that generates the state to run the function in
 (define createFunctionClosure
   (lambda (params body name classname)
+    (logln "Params" params)
     (list params body (generateFunctionState name) (generateFunctionClass classname))))
 
 ;generateFunctionState takes the name of a function and generates a function
@@ -154,12 +154,14 @@
 ;the state instead of the returned value
 (define evalFunction
   (lambda (closure params state return continue break throw)
-    (runFunction (getFunctionBody closure) (cons (setActualParams params (getFormalParams closure) state (cons stateEmpty state) return continue break throw) ((getStateFunc closure) state)) return continue break throw)))
+    (runFunction (getFunctionBody closure) (cons (setActualParams params (getFormalParams closure) state (cons stateEmpty state) return continue break throw ((getFunctionType closure) state)) ((getStateFunc closure) state)) return continue break throw)))
 (define runFunction
   (lambda (parsetree state return continue break throw)
     (if (null? parsetree)
         state
         (runFunction (nextLines parsetree) (evaluateStatement (currentLine parsetree) state (functionStateReturn state) continue break throw) return continue break throw))))
+
+(define getFunctionType cadddr)
 
 ;functionStateReturn replaces the return continuation when evaluating a function as a
 ;standalone statement
@@ -171,24 +173,42 @@
 ;returnFunctionValue executes a function and returns its value
 (define returnFunctionValue
   (lambda (closure params state return continue break throw type)
-    (run (getFunctionBody closure) type (cons (setVariablesInScope state (setActualParams params (getFormalParams closure) state (cons stateEmpty state) return continue break throw)) ((getStateFunc closure) state)) return continue break throw)))
+    (run (getFunctionBody closure) type (cons (setVariablesInScope state (setActualParams params (getFormalParams closure) state (cons stateEmpty state) return continue break throw ((getFunctionType closure) state))) ((getStateFunc closure) state)) return continue break throw)))
+
+(define returnDotFunctionValue
+  (lambda (exp params state return continue break throw type)
+    (logln "Dots!" exp)
+    (logln "Instance" (getDotInstance (cadr exp) state))
+    (returnFunctionValue (searchState (caddr exp) (car (getDotInstance (cadr exp) state))) params state return continue break throw type)))
+
+
+
+
+(define getDotInstance
+  (lambda (instanceName state)
+    (searchState instanceName state)))
+    
+
 
 ;setActualParams takes the function arguments and parameters and returns a layer
 ;containing the parameters and their assigned values
 (define setActualParams
-  (lambda (actualParams formalParams state funcState return continue break throw)
-    (logln actualParams state)
+  (lambda (actualParams formalParams state funcState return continue break throw type)
+    (logln "Actual Params" actualParams)
+    (logln "Formal Params" formalParams)
+    (logln "Type" type)
     (cond
       ((> (length actualParams) (length formalParams)) (error "Too many arguments!"))
       ((< (length actualParams) (length formalParams)) (error "Not enough arguments!"))
       ((and (null? actualParams) (eq? (firstLayer funcState) (firstLayer state))) (firstLayer (nextLayers funcState)))
       ((null? actualParams) (firstLayer funcState))
-      ((eq? (firstLayer funcState) (firstLayer state)) (setActualParams actualParams formalParams state (nextLayers funcState) return continue break throw))
+      ((eq? (firstLayer funcState) (firstLayer state)) (setActualParams actualParams formalParams state (nextLayers funcState) return continue break throw type))
+      ((eq? (car actualParams) 'this) (setActualParams (cdr actualParams) (cdr formalParams) state (addToState 'this type funcState) return continue break throw type))
       ((and (inState? (car formalParams) (nextLayers funcState)) (eq? (firstLayer funcState) (firstLayer state)))
        (setActualParams (cdr actualParams) (cdr formalParams)
                         state
-                        (replaceInState (car formalParams) (mathValue (car actualParams) funcState return continue break throw) state) return continue break throw))
-      (else (setActualParams (cdr actualParams) (cdr formalParams) state (addToState (car formalParams) (mathValue (car actualParams) state return continue break throw) funcState) return continue break throw)))))
+                        (replaceInState (car formalParams) (mathValue (car actualParams) type funcState return continue break throw) state) return continue break throw type))
+      (else (setActualParams (cdr actualParams) (cdr formalParams) state (addToState (car formalParams) (mathValue (car actualParams) type state return continue break throw) funcState) return continue break throw type)))))
 
 ;setVariablesInScope takes the state when a function is called and a layer
 ;containing the initialized actual parameters of the function and returns
@@ -223,15 +243,15 @@
       ((eq? (langValue statement) 'break) (break (statePopLayer state)))
       ((eq? (langValue statement) 'continue) (stateContinue state continue))
       ((eq? (langValue statement) 'try)  (stateTry statement state return continue break throw))
-      ((eq? (langValue statement) 'throw) (throw (mathValue (throwStatement statement) state return continue break throw) state))
+      ((eq? (langValue statement) 'throw) (throw (mathValue (throwStatement statement) type state return continue break throw) state))
       ((eq? (langValue statement) 'finally) (runBlock (blockBody statement) state return continue break throw)) ;executes code within regardless of rest of the try block, has try block scope
-      ((eq? (langValue statement) 'return) (returnValue (returnExp statement) state return continue break throw))
+      ((eq? (langValue statement) 'return) (returnValue (returnExp statement) state return continue break throw type))
       ((eq? (langValue statement) 'while) (stateWhile (whileConditon statement) (whileBody statement) state return continue break throw))
-      ((eq? (langValue statement) 'var) (stateDeclare (declareExp statement) state return continue break throw))
+      ((eq? (langValue statement) 'var) (stateDeclare (declareExp statement) state return continue break throw type))
       ((eq? (langValue statement) '=)
        (set-box! newState state)
-       (stateAssign (assignExp statement) state return continue break throw))
-      ((eq? (langValue statement) 'if) (stateIf (ifCondition statement) (thenStatement statement) (elseStatement statement) state return continue break throw))
+       (stateAssign (assignExp statement) state return continue break throw type))
+      ((eq? (langValue statement) 'if) (stateIf (ifCondition statement) (thenStatement statement) (elseStatement statement) state return continue break throw type))
       (else (error "Incorrect syntax")))))
 
 ;begins a block statement by creating a new layer on the state
@@ -287,27 +307,27 @@
 ;and returns the new state after evaluating either of the statements depending on
 ;the condition
 (define stateIf
-  (lambda (condition statement else state return continue break throw)
-    (if (mathValue condition state return continue break throw)
+  (lambda (condition statement else state return continue break throw type)
+    (if (mathValue condition type state return continue break throw)
         (evaluateStatement statement state return continue break throw)
         (evaluateStatement else state return continue break throw))))
 
 ;stateDeclare takes a statement containing a variable and possibly an assignment
 ;and returns the new state with the variable declared
 (define stateDeclare
-  (lambda (statement state return continue break throw)
+  (lambda (statement state return continue break throw type)
     (cond
       ((null? statement) state)
       ((null? (declareExp statement)) (addToState (variable statement) 'unassigned (removeFromState (variable statement) state)))
-      (else (addToState (variable statement) (mathValue (assignmentExp statement) state return continue break throw) (removeFromState (variable statement) state))))))
+      (else (addToState (variable statement) (mathValue (assignmentExp statement) type state return continue break throw) (removeFromState (variable statement) state))))))
 
 ;stateAssign takes a statement containing a variable and an expression and returns
 ;the new state with the variable assigned the value of the expression
 (define stateAssign
-  (lambda (statement state return continue break throw)
+  (lambda (statement state return continue break throw type)
     (cond
       ((null? statement) state)
-      (else (replaceInState (variable statement) (mathValue (assignmentExp statement) state return continue break throw) (unbox newState))))))
+      (else (replaceInState (variable statement) (mathValue (assignmentExp statement) type state return continue break throw) (unbox newState))))))
 
 ;assignment helpers
 (define assignmentExp cadr)
@@ -324,8 +344,8 @@
 ;stateWhile loop executes the code body iteration by iteration creating
 ;continue continuations until the loop condition is false
 (define stateWhileLoop
-  (lambda (condition body state return continue break throw)
-    (if (mathValue condition state return continue break throw)
+  (lambda (condition body state return continue break throw type)
+    (if (mathValue condition type state return continue break throw)
         (stateWhileLoop condition body (call/cc
                                         (lambda (newContinue)
                                           (evaluateStatement body state return newContinue break throw)))
@@ -335,9 +355,9 @@
 ;returnValue takes an expression and a state and returns the value of the expression
 ;as an integer or a boolean
 (define returnValue
-  (lambda (expression state return continue break throw)
+  (lambda (expression state return continue break throw type)
     (set-box! newState state)
-    (let ((val (mathValue expression state return continue break throw)))
+    (let ((val (mathValue expression type state return continue break throw)))
       (cond
         ((number? val) (return val))
         ((boolean? val) (return (boolValue val)))
@@ -345,7 +365,7 @@
 
 ;mathValue takes an expression and returns it's mathematical value (integer or boolean)
 (define mathValue
-  (lambda (exp state return continue break throw)
+  (lambda (exp type state return continue break throw)
     (cond
       ;null/error checks
       ((null? exp) exp)
@@ -354,28 +374,29 @@
       ((eq? exp 'false) #f)
       ((not (list? exp)) (searchState exp state)) ;not  number, yet not a list...must be a variable!
       ((number? (operator exp)) (error "Invalid expression")) ;the expression has no operator :(
-      ((eq? '!= (operator exp)) (not (= (mathValue (operand1 exp) state return continue break throw) (mathValue (operand2 exp) state return continue break throw))))
-      ((eq? '! (operator exp)) (not (mathValue (operand1 exp) state return continue break throw)))
-      ((and (eq? (operator exp) '-) (null? (binaryExp exp))) (- 0 (mathValue (operand1 exp) state)))
+      ((eq? '!= (operator exp)) (not (= (mathValue (operand1 exp) type state return continue break throw) (mathValue (operand2 exp) type state return continue break throw))))
+      ((eq? '! (operator exp)) (not (mathValue (operand1 exp) type state return continue break throw)))
+      ((and (eq? (operator exp) '-) (null? (binaryExp exp))) (- 0 (mathValue (operand1 exp) type state)))
       ((eq? (operator exp) 'new) (createInstanceClosure (trueType exp) state))
+      ((and (eq? (operator exp) 'funcall) (eq? (caadr exp) 'dot)) (returnDotFunctionValue (cadr exp) (cons 'this (getActualParams exp)) state return continue break throw type))
       ((eq? (operator exp) 'funcall)
-       (returnFunctionValue (searchState (cadr exp) state) (getActualParams exp) state return continue break throw))
-      ((or (eq? (mathValue (operand1 exp) state return continue break throw) 'unassigned) (eq? (mathValue(operand2 exp) state return continue break throw) 'unassigned)) (error "Variable has not been assigned a value"))
+       (returnFunctionValue (searchState (cadr exp) state) (cons 'this (getActualParams exp)) state return continue break throw type))
+      ((or (eq? (mathValue (operand1 exp) type state return continue break throw) 'unassigned) (eq? (mathValue (operand2 exp) type state return continue break throw) 'unassigned)) (error "Variable has not been assigned a value"))
       ;&&/||/! evaluation, needs to be in format (operator bool bool) else bad logic
-      ((eq? '&& (operator exp)) (and (mathValue (operand1 exp) state return continue break throw) (mathValue (operand2 exp) state return continue break throw)))
-      ((eq? '|| (operator exp)) (or (mathValue (operand1 exp) state return continue break throw) (mathValue (operand2 exp) state return continue break throw)))
+      ((eq? '&& (operator exp)) (and (mathValue (operand1 exp) type state return continue break throw) (mathValue (operand2 exp) type state return continue break throw)))
+      ((eq? '|| (operator exp)) (or (mathValue (operand1 exp) type state return continue break throw) (mathValue (operand2 exp) type state return continue break throw)))
       ;boolean evaluation
-      ((eq? '== (operator exp)) (equal? (mathValue (operand1 exp) state return continue break throw) (mathValue (operand2 exp) state return continue break throw)))
-      ((eq? '<= (operator exp)) (<= (mathValue (operand1 exp) state return continue break throw) (mathValue (operand2 exp) state return continue break throw)))
-      ((eq? '>= (operator exp)) (>= (mathValue (operand1 exp) state return continue break throw) (mathValue (operand2 exp) state return continue break throw)))
-      ((eq? '<  (operator exp))  (< (mathValue (operand1 exp) state return continue break throw) (mathValue (operand2 exp) state return continue break throw)))
-      ((eq? '>  (operator exp))  (> (mathValue (operand1 exp) state return continue break throw) (mathValue (operand2 exp) state return continue break throw)))
+      ((eq? '== (operator exp)) (equal? (mathValue (operand1 exp) type state return continue break throw) (mathValue (operand2 exp) type state return continue break throw)))
+      ((eq? '<= (operator exp)) (<= (mathValue (operand1 exp) type state return continue break throw) (mathValue (operand2 exp) type state return continue break throw)))
+      ((eq? '>= (operator exp)) (>= (mathValue (operand1 exp) type state return continue break throw) (mathValue (operand2 exp) type state return continue break throw)))
+      ((eq? '<  (operator exp))  (< (mathValue (operand1 exp) type state return continue break throw) (mathValue (operand2 exp) type state return continue break throw)))
+      ((eq? '>  (operator exp))  (> (mathValue (operand1 exp) type state return continue break throw) (mathValue (operand2 exp) type state return continue break throw)))
       ;math evaluation
-      ((eq? '+ (operator exp)) (+ (mathValue (operand1 exp) state return continue break throw) (mathValue (operand2 exp) state return continue break throw)))
-      ((eq? '- (operator exp)) (- (mathValue (operand1 exp) state return continue break throw) (mathValue (operand2 exp) state return continue break throw)))
-      ((eq? '* (operator exp)) (* (mathValue (operand1 exp) state return continue break throw) (mathValue (operand2 exp) state return continue break throw)))
-      ((eq? '/ (operator exp)) (quotient (mathValue (operand1 exp) state return continue break throw) (mathValue (operand2 exp) state return continue break throw)))
-      ((eq? '% (operator exp)) (remainder (mathValue (operand1 exp) state return continue break throw) (mathValue (operand2 exp) state return continue break throw)))
+      ((eq? '+ (operator exp)) (+ (mathValue (operand1 exp) type state return continue break throw) (mathValue (operand2 exp) type state return continue break throw)))
+      ((eq? '- (operator exp)) (- (mathValue (operand1 exp) type state return continue break throw) (mathValue (operand2 exp) type state return continue break throw)))
+      ((eq? '* (operator exp)) (* (mathValue (operand1 exp) type state return continue break throw) (mathValue (operand2 exp) type state return continue break throw)))
+      ((eq? '/ (operator exp)) (quotient (mathValue (operand1 exp) type state return continue break throw) (mathValue (operand2 exp) type state return continue break throw)))
+      ((eq? '% (operator exp)) (remainder (mathValue (operand1 exp) type state return continue break throw) (mathValue (operand2 exp) type state return continue break throw)))
       (else (error "Unknown Operator")))))
 
 (define trueType cadr)
@@ -405,6 +426,8 @@
 ;searchState takes a name and a state and returns associated data or procedure
 (define searchState
   (lambda (var state)
+    (logln "Searching for " var)
+    (logln "in " state)
     (cond
       ((null? state) (error "Variable/Function not in scope"))
       ((or (null? (nameBindings state)) (null? (valueBindings state))) (searchState var (nextLayers state)))
