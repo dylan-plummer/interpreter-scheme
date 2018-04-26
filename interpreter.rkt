@@ -13,7 +13,7 @@
     (call/cc
      (lambda (return)
        (let ((environment (stateGlobal (parser filename) (list stateEmpty) return defaultContinue defaultBreak defaultThrow)))
-         (runMainInClass (searchState classname environment) classname environment return defaultContinue defaultBreak defaultThrow))))))
+         (runMainInClass (searchState (string->symbol classname) environment) (string->symbol classname) environment return defaultContinue defaultBreak defaultThrow))))))
 
 
 ; returnFunctionValue takes(lambda (closure params state return continue break throw type)
@@ -47,13 +47,13 @@
     (cond
       ((null? statement) state)
       ((and (eq? (langValue statement) 'class) (null? (caddr statement)) (addToState (className statement) (createClassClosure (className statement) NULL (classBody statement) state) state)))
-      ((and (eq? (langValue statement) 'class) (eq? (caaddr statement) 'extends)) (addToState (className statement) (createClassClosure (searchState (superClass statement) state) (classBody statement) state) state))
+      ((and (eq? (langValue statement) 'class) (eq? (caaddr statement) 'extends)) (addToState (className statement) (createClassClosure (className statement) (searchState (superClass statement) state) (classBody statement) state) state))
       (else state))))
 
 (define className cadr)
 (define superClass
   (lambda (exp)
-    (car (caddr))))
+    (cadr (caddr exp))))
 (define classBody cadddr)
 
 ;a class closure stores the methods of the class and its inherited methods,
@@ -65,7 +65,7 @@
   (logln "Closure from " body)
     (cond
       ((null? super) (list (getClassMethods name body stateEmpty) (getClassFields body stateEmpty) NULL)) ;create new class
-      (else ((list (getClassMethods name body stateEmpty) (getClassFields body stateEmpty) (searchState super state))))))) ;class extends
+      (else (list (getClassMethods name body stateEmpty) (getClassFields body stateEmpty) super state))))) ;class extends
 
 ;((var x 5) (var y 10) (static-function main () ((var a (new A)) (return (+ (dot a x) (dot a y))))))
 (define getClassFields
@@ -84,7 +84,7 @@
       ((null? body) state)
       ((eq? (caar body) 'static-function) (getClassMethods name (cdr body) (addToLayer (cadr (car body)) (createFunctionClosure (functionParams (car body)) (functionBody (car body)) (functionName (car body)) name) state)))
       ((eq? (caar body) 'function) (getClassMethods name (cdr body) (addToLayer (cadr (car body)) (createFunctionClosure (cons 'this (functionParams (car body))) (functionBody (car body)) (functionName (car body)) name) state)))
-      (else (getClassMethods (cdr body) state)))))
+      (else (getClassMethods name (cdr body) state)))))
 
 
 ;an instance closure contains the class (closure) and the instance
@@ -181,13 +181,16 @@
     (logln "Instance" (getDotInstance (cadr exp) state))
     (returnFunctionValue (searchState (caddr exp) (car (getDotInstance (cadr exp) state))) params state return continue break throw type)))
 
-
+(define dotGetFieldValue
+  (lambda (exp state)
+    (logln "Dots!" exp)
+    (logln "Instance" (getDotInstance (cadr exp) state))
+    (searchState (caddr exp) (list (cadr (getDotInstance (cadr exp) state))))))
 
 
 (define getDotInstance
   (lambda (instanceName state)
     (searchState instanceName state)))
-    
 
 
 ;setActualParams takes the function arguments and parameters and returns a layer
@@ -234,6 +237,7 @@
 ;evaluating the statement
 (define evaluateStatement
   (lambda (statement state type return continue break throw)
+    (logln "Current Statement" statement)
     (cond
       ((null? statement) state)
       ((eq? (langValue statement) 'function) (bindFunctionClosure statement type state))
@@ -381,6 +385,7 @@
       ((and (eq? (operator exp) 'funcall) (eq? (caadr exp) 'dot)) (returnDotFunctionValue (cadr exp) (cons 'this (getActualParams exp)) state return continue break throw type))
       ((eq? (operator exp) 'funcall)
        (returnFunctionValue (searchState (cadr exp) state) (cons 'this (getActualParams exp)) state return continue break throw type))
+      ((eq? (operator exp) 'dot) (dotGetFieldValue exp state))
       ((or (eq? (mathValue (operand1 exp) type state return continue break throw) 'unassigned) (eq? (mathValue (operand2 exp) type state return continue break throw) 'unassigned)) (error "Variable has not been assigned a value"))
       ;&&/||/! evaluation, needs to be in format (operator bool bool) else bad logic
       ((eq? '&& (operator exp)) (and (mathValue (operand1 exp) type state return continue break throw) (mathValue (operand2 exp) type state return continue break throw)))
