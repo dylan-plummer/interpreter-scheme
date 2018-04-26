@@ -90,7 +90,15 @@
 
 ;an instance closure contains the class (closure) and the instance
 ;field values (in reverse order)
-;(define createInstanceClosure
+(define createInstanceClosure
+  (lambda (typeName state)
+    (logln "Instance Closure" typeName)
+    (list (searchState typeName state) (getFieldValues typeName state))))
+
+(define getFieldValues
+  (lambda (typeName state)
+    (logln "Field Vals" state)
+    (cadr (searchState typeName state))))
 
 ;stateClass takes in the parse tree and creates the base layer of the class state
 ;which contains only functions and class fields
@@ -329,9 +337,11 @@
 (define returnValue
   (lambda (expression state return continue break throw)
     (set-box! newState state)
+    (let ((val (mathValue expression state return continue break throw)))
       (cond
-        ((number? (mathValue expression state return continue break throw)) (return (mathValue expression state  return continue break throw)))
-        (else (return (boolValue (mathValue expression state return continue break throw)))))))
+        ((number? val) (return val))
+        ((boolean? val) (return (boolValue val)))
+        (else (return val))))))
 
 ;mathValue takes an expression and returns it's mathematical value (integer or boolean)
 (define mathValue
@@ -347,6 +357,7 @@
       ((eq? '!= (operator exp)) (not (= (mathValue (operand1 exp) state return continue break throw) (mathValue (operand2 exp) state return continue break throw))))
       ((eq? '! (operator exp)) (not (mathValue (operand1 exp) state return continue break throw)))
       ((and (eq? (operator exp) '-) (null? (binaryExp exp))) (- 0 (mathValue (operand1 exp) state)))
+      ((eq? (operator exp) 'new) (createInstanceClosure (trueType exp) state))
       ((eq? (operator exp) 'funcall)
        (returnFunctionValue (searchState (cadr exp) state) (getActualParams exp) state return continue break throw))
       ((or (eq? (mathValue (operand1 exp) state return continue break throw) 'unassigned) (eq? (mathValue(operand2 exp) state return continue break throw) 'unassigned)) (error "Variable has not been assigned a value"))
@@ -366,6 +377,8 @@
       ((eq? '/ (operator exp)) (quotient (mathValue (operand1 exp) state return continue break throw) (mathValue (operand2 exp) state return continue break throw)))
       ((eq? '% (operator exp)) (remainder (mathValue (operand1 exp) state return continue break throw) (mathValue (operand2 exp) state return continue break throw)))
       (else (error "Unknown Operator")))))
+
+(define trueType cadr)
 
 ;addToState takes a variable and data and adds it to a state
 (define addToState
@@ -392,8 +405,6 @@
 ;searchState takes a name and a state and returns associated data or procedure
 (define searchState
   (lambda (var state)
-    (logln var state)
-    (logln var (searchCurrentName state))
     (cond
       ((null? state) (error "Variable/Function not in scope"))
       ((or (null? (nameBindings state)) (null? (valueBindings state))) (searchState var (nextLayers state)))
