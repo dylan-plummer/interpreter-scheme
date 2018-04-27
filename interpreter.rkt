@@ -184,13 +184,14 @@
   (lambda (exp params state return continue break throw type)
     (logln "Dots!" exp)
     (logln "Instance" (getDotInstance (cadr exp) state))
-    (returnFunctionValue (searchState (caddr exp) (list (car (getDotInstance (cadr exp) state)))) params state return continue break throw type)))
+    (returnFunctionValue (searchState (caddr exp) (car (getDotInstance (cadr exp) state))) params state return continue break throw type)))
 
 (define evalDotFunction
   (lambda (exp params state return continue break throw type)
     (logln "Dots!" exp)
     (logln "Instance" (getDotInstance (cadr exp) state))
     (let ((updatedState (evalFunction (searchState (caddr exp) (car (getDotInstance (cadr exp) state))) params state return continue break throw type)))
+      (logln "updatedState" updatedState)
       (replaceInState (cadr exp) (searchState 'this updatedState) state))))
 
 (define dotGetFieldValue
@@ -203,7 +204,7 @@
   (lambda (instance val name)
     (logln "Set Field Values name" name)
     (logln "Set Field Values values" (cadr instance))
-    (cons (car instance) (replaceInState name val (list (cadr instance))))))
+    (cons (list (car instance)) (replaceInState name val (list (cadr instance))))))
    
 
 
