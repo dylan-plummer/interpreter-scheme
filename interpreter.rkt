@@ -31,6 +31,7 @@
   (lambda (parsetree type state return continue break throw)
     (call/cc
      (lambda (newReturn)
+       (set-box! newState state)
        (if (null? parsetree)
            state
            (run (nextLines parsetree) type (evaluateStatement (currentLine parsetree) state type newReturn continue break throw) return continue break throw))))))
@@ -62,7 +63,7 @@
 ;the constructors (not inherited)
 (define createClassClosure
   (lambda (name super body state)
-  (logln "Closure from " body)
+  ;(logln "Closure from " body)
     (cond
       ((null? super) (list (getClassMethods name body stateEmpty) (getClassFields body stateEmpty) NULL)) ;create new class
       (else (list (getClassMethods name body stateEmpty) (getClassFields body stateEmpty) super state))))) ;class extends
@@ -70,7 +71,7 @@
 ;((var x 5) (var y 10) (static-function main () ((var a (new A)) (return (+ (dot a x) (dot a y))))))
 (define getClassFields
   (lambda (body state)
-  (logln "Current fields" state)
+  ;(logln "Current fields" state)
     (cond
       ((null? body) state)
       ((eq? (caar body) 'var) (getClassFields (cdr body) (addToLayer (cadr (car body)) (caddr (car body)) state)))
@@ -79,7 +80,7 @@
 
 (define getClassMethods
   (lambda (name body state)
-  (logln "Current methods" state)
+  ;(logln "Current methods" state)
     (cond
       ((null? body) state)
       ((eq? (caar body) 'static-function) (getClassMethods name (cdr body) (addToLayer (cadr (car body)) (createFunctionClosure (functionParams (car body)) (functionBody (car body)) (functionName (car body)) name) state)))
@@ -89,6 +90,7 @@
 
 ;an instance closure contains the class (closure) and the instance
 ;field values (in reverse order)
+;reverse the field values and
 (define createInstanceClosure
   (lambda (typeName state)
     (logln "Instance Closure" typeName)
@@ -131,8 +133,8 @@
 ;body, and a function that generates the state to run the function in
 (define createFunctionClosure
   (lambda (params body name classname)
-    (logln "Params" params)
-    (list params body (generateFunctionState name) (generateFunctionClass classname))))
+    ;(logln "Params" params)
+    (list params body (generateFunctionState classname) (generateFunctionClass classname))))
 
 ;generateFunctionState takes the name of a function and generates a function
 ;that takes a state and returns the state where the scope of the function
@@ -140,9 +142,10 @@
 (define generateFunctionState
   (lambda (name)
     (lambda (state)
+      (logln "Function state" state)
       (cond
         ((null? (nextLayers state)) state)
-        ((inLayer? name (firstLayer state)) state)
+        ((inLayer? name (firstLayer (nextLayers state))) state)
         (else ((generateFunctionState name) (nextLayers state)))))))
 
 (define generateFunctionClass
@@ -153,13 +156,15 @@
 ;evalFunction and runFunction evaluate a function and upon reaching the return continuation returns
 ;the state instead of the returned value
 (define evalFunction
-  (lambda (closure params state return continue break throw)
-    (runFunction (getFunctionBody closure) (cons (setActualParams params (getFormalParams closure) state (cons stateEmpty state) return continue break throw ((getFunctionType closure) state)) ((getStateFunc closure) state)) return continue break throw)))
+  (lambda (closure params state return continue break throw type)
+    (logln "Eval state" state)
+    (runFunction (getFunctionBody closure) (cons (setVariablesInScope state (setActualParams params (getFormalParams closure) state (cons stateEmpty state) return continue break throw ((getFunctionType closure) state)) type) ((getStateFunc closure) state)) return continue break throw type)))
 (define runFunction
-  (lambda (parsetree state return continue break throw)
+  (lambda (parsetree state return continue break throw type)
+    (logln "Run Function state" state)
     (if (null? parsetree)
         state
-        (runFunction (nextLines parsetree) (evaluateStatement (currentLine parsetree) state (functionStateReturn state) continue break throw) return continue break throw))))
+        (runFunction (nextLines parsetree) (evaluateStatement (currentLine parsetree) state type (functionStateReturn state) continue break throw) return continue break throw type))))
 
 (define getFunctionType cadddr)
 
@@ -173,19 +178,33 @@
 ;returnFunctionValue executes a function and returns its value
 (define returnFunctionValue
   (lambda (closure params state return continue break throw type)
-    (run (getFunctionBody closure) type (cons (setVariablesInScope state (setActualParams params (getFormalParams closure) state (cons stateEmpty state) return continue break throw ((getFunctionType closure) state))) ((getStateFunc closure) state)) return continue break throw)))
+    (run (getFunctionBody closure) type (cons (setVariablesInScope state (setActualParams params (getFormalParams closure) state (cons stateEmpty state) return continue break throw type) type) ((getStateFunc closure) state)) return continue break throw)))
 
 (define returnDotFunctionValue
   (lambda (exp params state return continue break throw type)
     (logln "Dots!" exp)
     (logln "Instance" (getDotInstance (cadr exp) state))
-    (returnFunctionValue (searchState (caddr exp) (car (getDotInstance (cadr exp) state))) params state return continue break throw type)))
+    (returnFunctionValue (searchState (caddr exp) (list (car (getDotInstance (cadr exp) state)))) params state return continue break throw type)))
+
+(define evalDotFunction
+  (lambda (exp params state return continue break throw type)
+    (logln "Dots!" exp)
+    (logln "Instance" (getDotInstance (cadr exp) state))
+    (let ((updatedState (evalFunction (searchState (caddr exp) (car (getDotInstance (cadr exp) state))) params state return continue break throw type)))
+      (replaceInState (cadr exp) (searchState 'this updatedState) state))))
 
 (define dotGetFieldValue
   (lambda (exp state)
     (logln "Dots!" exp)
     (logln "Instance" (getDotInstance (cadr exp) state))
     (searchState (caddr exp) (list (cadr (getDotInstance (cadr exp) state))))))
+
+(define setFieldValue
+  (lambda (instance val name)
+    (logln "Set Field Values name" name)
+    (logln "Set Field Values values" (cadr instance))
+    (cons (car instance) (replaceInState name val (list (cadr instance))))))
+   
 
 
 (define getDotInstance
@@ -217,12 +236,14 @@
 ;containing the initialized actual parameters of the function and returns
 ;a new layer containing all variables that should be in the scope of the function
 (define setVariablesInScope
-  (lambda (state paramLayer)
+  (lambda (state paramLayer type)
+    (logln "Setting scope state" state)
+    (logln "Looking for" type)
     (cond
       ((null? (nextLayers state)) paramLayer)
       ((eq? (firstLayer (nextLayers state)) stateEmpty) paramLayer)
-      ((inLayer? 'main (firstLayer (nextLayers state))) paramLayer)
-      (else (setVariablesInScope (nextLayers state) (mergeLayers (firstLayer (nextLayers state)) paramLayer))))))
+      ((inLayer? type (firstLayer (nextLayers state))) paramLayer)
+      (else (setVariablesInScope (nextLayers state) (mergeLayers (firstLayer (nextLayers state)) paramLayer) type)))))
 
 ;mergeLayers merges two layers into one containing all values from both
 (define mergeLayers
@@ -238,9 +259,11 @@
 (define evaluateStatement
   (lambda (statement state type return continue break throw)
     (logln "Current Statement" statement)
+    (logln "type" statement)
     (cond
       ((null? statement) state)
       ((eq? (langValue statement) 'function) (bindFunctionClosure statement type state))
+      ((and (eq? (langValue statement) 'funcall) (eq? (caadr statement) 'dot)) (evalDotFunction (cadr statement) (cons 'this (getActualParams statement)) state return continue break throw type))
       ((eq? (langValue statement) 'funcall)
           (evalFunction (searchState (funcName statement) state) (getActualParams statement) state return continue break throw))
       ((eq? (langValue statement) 'begin) (stateBeginBlock (wholeBody statement) state return continue break throw))
@@ -329,8 +352,13 @@
 ;the new state with the variable assigned the value of the expression
 (define stateAssign
   (lambda (statement state return continue break throw type)
+    (logln "Assign state" state)
+    (logln "Assign statement" statement)
+    (logln "Assigning to" (cadr (variable statement)))
     (cond
       ((null? statement) state)
+      ((list? (variable statement)) (replaceInState (cadr (variable statement)) (setFieldValue (searchState (cadr (variable statement)) state) (mathValue (assignmentExp statement) type state return continue break throw) (caddr (variable statement)))(unbox newState)))
+      ;((list? (variable statement)) (replaceInState (caddr (variable statement)) (mathValue (assignmentExp statement) type state return continue break throw) (unbox newState)))
       (else (replaceInState (variable statement) (mathValue (assignmentExp statement) type state return continue break throw) (unbox newState))))))
 
 ;assignment helpers
@@ -370,6 +398,7 @@
 ;mathValue takes an expression and returns it's mathematical value (integer or boolean)
 (define mathValue
   (lambda (exp type state return continue break throw)
+    (logln "Math value of" exp)
     (cond
       ;null/error checks
       ((null? exp) exp)
@@ -382,7 +411,7 @@
       ((eq? '! (operator exp)) (not (mathValue (operand1 exp) type state return continue break throw)))
       ((and (eq? (operator exp) '-) (null? (binaryExp exp))) (- 0 (mathValue (operand1 exp) type state)))
       ((eq? (operator exp) 'new) (createInstanceClosure (trueType exp) state))
-      ((and (eq? (operator exp) 'funcall) (eq? (caadr exp) 'dot)) (returnDotFunctionValue (cadr exp) (cons 'this (getActualParams exp)) state return continue break throw type))
+      ((and (eq? (operator exp) 'funcall) (eq? (caadr exp) 'dot)) (returnDotFunctionValue (cadr exp) (cons 'this (getActualParams exp)) state return continue break throw (searchState (cadr (cadr exp)) state)))
       ((eq? (operator exp) 'funcall)
        (returnFunctionValue (searchState (cadr exp) state) (cons 'this (getActualParams exp)) state return continue break throw type))
       ((eq? (operator exp) 'dot) (dotGetFieldValue exp state))
@@ -462,6 +491,10 @@
 ;with that variable's value replaced with the given value
 (define replaceInState
   (lambda (var val state)
+    (logln "Replace" var)
+    (logln "with" val)
+    (logln "in" state)
+    (logln "firstLayer" (firstLayer state))
     ;recurse through layer, if it's empty, go to the next layer
     ;if variable found, replace it, otherwise keep going through layer
     (cond
