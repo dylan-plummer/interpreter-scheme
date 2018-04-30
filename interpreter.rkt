@@ -63,15 +63,15 @@
 ;the constructors (not inherited)
 (define createClassClosure
   (lambda (name super body state)
-  (logln "SuperClass " super)
+  ;(logln "SuperClass " super)
     (cond
       ((null? super) (list (getClassMethods name body stateEmpty) (getClassFields body stateEmpty) NULL)) ;create new class
-      (else (list (getClassMethods name body stateEmpty) (mergeLayers (cadr super) (getClassFields body stateEmpty)) super))))) ;class extends
+      (else (list (mergeLayers (car super) (getClassMethods name body stateEmpty)) (mergeLayers (cadr super) (getClassFields body stateEmpty)) super))))) ;class extends
 
 ;((var x 5) (var y 10) (static-function main () ((var a (new A)) (return (+ (dot a x) (dot a y))))))
 (define getClassFields
   (lambda (body state)
-  (logln "Current fields"  body)
+  ;(logln "Current fields"  body)
     (cond
       ((null? body) state)
       ((null? (cdr (car body))) (getClassFields (cdr body) state))
@@ -95,12 +95,12 @@
 ;reverse the field values and
 (define createInstanceClosure
   (lambda (typeName state)
-    (logln "Instance Closure" typeName)
+    ;(logln "Instance Closure" typeName)
     (list (searchState typeName state) (getFieldValues typeName state))))
 
 (define getFieldValues
   (lambda (typeName state)
-    (logln "Field Vals" state)
+    ;(logln "Field Vals" state)
     (cadr (searchState typeName state))))
 
 ;stateClass takes in the parse tree and creates the base layer of the class state
@@ -136,7 +136,7 @@
 (define createFunctionClosure
   (lambda (params body name classname)
     ;(logln "Params" params)
-    (logln "Function class" classname)
+    ;(logln "Function class" classname)
     (list params body (generateFunctionState name) (generateFunctionClass classname))))
 
 ;generateFunctionState takes the name of a function and generates a function
@@ -146,9 +146,10 @@
   (lambda (name)
     (lambda (state)
       (logln "Function name" name)
-      (logln "Function state" state)
+      ;(logln "Function state" state)
       (cond
         ((null? (nextLayers state)) state)
+        ((inLayer? 'this (firstLayer state)) state)
         ((inLayer? name (firstLayer (nextLayers state))) state)
         (else ((generateFunctionState name) (nextLayers state)))))))
 
@@ -156,18 +157,18 @@
   (lambda (classname)
     (lambda (state)
       (logln "Generate function class for" classname)
-      (logln "in state" state)
+      ;(logln "in state" state)
       (searchState classname state))))
 
 ;evalFunction and runFunction evaluate a function and upon reaching the return continuation returns
 ;the state instead of the returned value
 (define evalFunction
   (lambda (closure params state return continue break throw type)
-    (logln "Eval state" state)
+    ;(logln "Eval state" state)
     (runFunction (getFunctionBody closure) (cons (setVariablesInScope state (setActualParams params (getFormalParams closure) state (cons stateEmpty state) return continue break throw type) type) ((getStateFunc closure) state)) return continue break throw type)))
 (define runFunction
   (lambda (parsetree state return continue break throw type)
-    (logln "Run Function state" state)
+    ;(logln "Run Function state" state)
     (if (null? parsetree)
         state
         (runFunction (nextLines parsetree) (evaluateStatement (currentLine parsetree) state type (functionStateReturn state) continue break throw) return continue break throw type))))
@@ -185,15 +186,15 @@
 (define returnFunctionValue
   (lambda (closure params state return continue break throw type)
     (logln "Return type" type)
-    (logln "return function state" state)
+    ;(logln "return function state" state)
     (run (getFunctionBody closure) type (cons (setVariablesInScope state (setActualParams params (getFormalParams closure) state (cons stateEmpty state) return continue break throw type) type) ((getStateFunc closure) state)) return continue break throw)))
 
 (define returnDotFunctionValue
   (lambda (exp params state return continue break throw type)
     (logln "Dots!" exp)
-    (logln "TYPE IN DOT" type)
-    (logln "Super?" (cadr exp))
-    (logln "dot function state" state)
+    ;(logln "TYPE IN DOT" type)
+    ;(logln "Super?" (cadr exp))
+    ;(logln "dot function state" state)
     ;(logln "Instance" (getDotInstance (cadr exp) state))
     (cond
       ;((eq? (cadr exp) 'super) (logln "Dot instance" (replaceInState 'this (caddr (car (searchState 'this state))) (replaceInState 'super (caddr (searchState 'super state)) state))));(logln "Instance search" (searchState (caddr exp) (getDotInstance (cadr exp) state))));(logln "Dot instance" (getDotInstance (cadr exp) state)))
@@ -205,16 +206,18 @@
 
 (define evalDotFunction
   (lambda (exp params state return continue break throw type)
-    ;(logln "Dots!" exp)
+    (logln "Dots!" exp)
+    (logln "eval dot function state" state)
     ;(logln "Instance" (getDotInstance (cadr exp) state))
     (let ((updatedState (evalFunction (searchState (caddr exp) (car (getDotInstance (cadr exp) state))) params state return continue break throw type)))
       (logln "updatedState" updatedState)
-      (replaceInState (cadr exp) (searchState 'this updatedState) state))))
+      (if (eq? (cadr exp) 'super) (replaceInState (cadr exp) (searchState 'this updatedState) (replaceInState 'this (searchState 'this updatedState) state)) 
+          (replaceInState (cadr exp) (searchState 'this updatedState) state)))))
 
 (define dotGetFieldValue
   (lambda (exp state)
     (logln "Field Dots!" exp)
-    (logln "Searching" state)
+    ;(logln "Searching" state)
     ;(logln "Instance" (getDotInstance (cadr exp) state))
     (cond
       ((and (list? (cadr exp)) (eq? (car (cadr exp)) 'new)) (searchState (caddr exp) (list (cadr (createInstanceClosure (cadr (cadr exp)) state)))))
@@ -240,9 +243,9 @@
     ;(logln "Actual Params" actualParams)
     ;(logln "Formal Params" formalParams)
     (logln "BOX" (unbox currentInstance))
-    (logln "Type in setActualParams" type)
-    (logln "old state" state)
-    (logln "function state" funcState)
+    ;(logln "Type in setActualParams" type)
+    ;(logln "old state" state)
+    ;(logln "function state" funcState)
     (cond
       ((> (length actualParams) (length formalParams)) (error "Too many arguments!"))
       ((< (length actualParams) (length formalParams)) (error "Not enough arguments!"))
@@ -251,7 +254,9 @@
       ((eq? (firstLayer funcState) (firstLayer state)) (setActualParams actualParams formalParams state (nextLayers funcState) return continue break throw type))
       ;((eq? (unbox currentInstance) 'super)
       ((and (and (eq? (car actualParams) 'this) (inState? 'this state)) (eq? (unbox currentInstance) 'super)) (setActualParams (cdr actualParams) (cdr formalParams) state funcState return continue break throw type))
-      ((and (eq? (car actualParams) 'this) (inState? 'this state)) (setActualParams (cdr actualParams) (cdr formalParams) state (addToState 'this (searchState (unbox currentInstance) state) funcState) return continue break throw type))
+      ((and (eq? (car actualParams) 'this) (inState? 'this state))
+       (if (inState? (unbox currentInstance) state) (setActualParams (cdr actualParams) (cdr formalParams) state (addToState 'this (searchState (unbox currentInstance) state) funcState) return continue break throw type)
+           (setActualParams (cdr actualParams) (cdr formalParams) state (addToState 'this (searchState 'this state) funcState) return continue break throw type)))
       ((eq? (car actualParams) 'this) (setActualParams (cdr actualParams) (cdr formalParams) state (addToState 'this (searchState (unbox currentInstance) state) funcState) return continue break throw type))
       ((and (inState? (car formalParams) (nextLayers funcState)) (eq? (firstLayer funcState) (firstLayer state)))
        (setActualParams (cdr actualParams) (cdr formalParams)
@@ -266,8 +271,8 @@
 (define setVariablesInScope
   (lambda (state paramLayer type)
     ;(logln "Setting scope state" state)
-    (logln "Function paramLayer" paramLayer)
-    (logln "Function type" type)
+    ;(logln "Function paramLayer" paramLayer)
+    ;(logln "Function type" type)
     (cond
       ((null? (nextLayers state)) paramLayer)
       ((eq? (firstLayer (nextLayers state)) stateEmpty) paramLayer)
@@ -290,7 +295,7 @@
   (lambda (statement state type return continue break throw)
     (logln "Current Statement" statement)
     (logln "Current State" state)
-    (logln "type" type)
+    ;(logln "type" type)
     (cond
       ((null? statement) state)
       ((eq? (langValue statement) 'function) (bindFunctionClosure statement type state))
@@ -299,18 +304,19 @@
        (evalDotFunction (cadr statement) (cons 'this (getActualParams statement)) state return continue break throw (car (createInstanceClosure (trueType (cadr (cadr statement))) state))))
       ((and (and (eq? (langValue statement) 'funcall) (eq? (caadr statement) 'dot)) (eq? (cadr (cadr statement)) 'super))
        (set-box! currentInstance (cadr (cadr statement)))
-       (evalDotFunction (cadr statement) (cons 'this (getActualParams statement)) (addToState 'super (setSuperClassFields (caddr type) type state) state) return continue break throw (caddr type)))
+       (if (inState? 'this state) (evalDotFunction (cadr statement) (cons 'this (getActualParams statement)) (addToState 'super (setSuperClassFields (caddr type) type state) state) return continue break throw type)
+           (evalDotFunction (cadr statement) (cons 'this (getActualParams statement)) (addToState 'super (setSuperClassFields (caddr type) type state) state) return continue break throw type)))
       ((and (eq? (langValue statement) 'funcall) (eq? (caadr statement) 'dot))
        (set-box! currentInstance (cadr (cadr statement)))
        (evalDotFunction (cadr statement) (cons 'this (getActualParams statement)) state return continue break throw type))
       ((eq? (langValue statement) 'funcall)
        (evalFunction (searchState (funcName statement) state) (getActualParams statement) state return continue break throw))
-      ((eq? (langValue statement) 'begin) (stateBeginBlock (wholeBody statement) state return continue break throw))
+      ((eq? (langValue statement) 'begin) (stateBeginBlock (wholeBody statement) state return continue break throw type))
       ((eq? (langValue statement) 'break) (break (statePopLayer state)))
       ((eq? (langValue statement) 'continue) (stateContinue state continue))
       ((eq? (langValue statement) 'try)  (stateTry statement state return continue break throw))
       ((eq? (langValue statement) 'throw) (throw (mathValue (throwStatement statement) type state return continue break throw) state))
-      ((eq? (langValue statement) 'finally) (runBlock (blockBody statement) state return continue break throw)) ;executes code within regardless of rest of the try block, has try block scope
+      ((eq? (langValue statement) 'finally) (runBlock (blockBody statement) state return continue break throw type)) ;executes code within regardless of rest of the try block, has try block scope
       ((eq? (langValue statement) 'return) (returnValue (returnExp statement) state return continue break throw type))
       ((eq? (langValue statement) 'while) (stateWhile (whileConditon statement) (whileBody statement) state return continue break throw))
       ((eq? (langValue statement) 'var) (stateDeclare (declareExp statement) state return continue break throw type))
@@ -323,15 +329,15 @@
 ;begins a block statement by creating a new layer on the state
 ;and running the body
 (define stateBeginBlock
-  (lambda (expression state return continue break throw)
-    (runBlock expression (cons stateEmpty state) return continue break throw)))
+  (lambda (expression state return continue break throw type)
+    (runBlock expression (cons stateEmpty state) return continue break throw type)))
 
 ;runs a block of code line by line and returns the state
 (define runBlock
-  (lambda (block state return continue break throw)
+  (lambda (block state return continue break throw type)
     (if (null? block)
       state
-      (runBlock (nextLines block) (evaluateStatement (currentLine block) state return continue break throw) return continue break throw))))
+      (runBlock (nextLines block) (evaluateStatement (currentLine block) state type return continue break throw) return continue break throw type))))
 
 ;stateTry runs a try-catch-finally block by first checking which parts of the block are
 ;present in the code, then running them
@@ -359,10 +365,10 @@
 
  ;creates a new block and scope for catch body with the thrown variable
 (define stateCatch
-  (lambda (body val state return continue break throw)
+  (lambda (body val state return continue break throw type)
     (if (null? body)
       state
-      (runBlock (catchBody body) (addToState (catchValue body) val (unbox newState)) return continue break throw))))
+      (runBlock (catchBody body) (addToState (catchValue body) val (unbox newState)) return continue break throw type))))
 
 ;stateContinue calls the continue continuation and pops the layer of the loop
 (define stateContinue
@@ -375,8 +381,8 @@
 (define stateIf
   (lambda (condition statement else state return continue break throw type)
     (if (mathValue condition type state return continue break throw)
-        (evaluateStatement statement state return continue break throw)
-        (evaluateStatement else state return continue break throw))))
+        (evaluateStatement statement state type return continue break throw)
+        (evaluateStatement else state type return continue break throw))))
 
 ;stateDeclare takes a statement containing a variable and possibly an assignment
 ;and returns the new state with the variable declared
@@ -393,12 +399,14 @@
   (lambda (statement state return continue break throw type)
     (logln "Assign state" state)
     (logln "Assign statement" statement)
+    (logln "assign type" type)
     ;(logln "Assigning to" (cadr (variable statement)))
     (cond
       ((null? statement) state)
       ((list? (variable statement)) (replaceInState (cadr (variable statement)) (setFieldValue (searchState (cadr (variable statement)) state) (mathValue (assignmentExp statement) type state return continue break throw) (caddr (variable statement)))(unbox newState)))
       ;((list? (variable statement)) (replaceInState (caddr (variable statement)) (mathValue (assignmentExp statement) type state return continue break throw) (unbox newState)))
-      (else (replaceInState (variable statement) (mathValue (assignmentExp statement) type state return continue break throw) (unbox newState))))))
+      ((inLayer? (variable statement) (cadr type)) (addToState 'this (setFieldValue type (mathValue (assignmentExp statement) type state return continue break throw) (variable statement)) state))
+      (else (replaceInState (variable statement) (mathValue (assignmentExp statement) type state return continue break throw) state)))))
 
 ;assignment helpers
 (define assignmentExp cadr)
@@ -451,18 +459,19 @@
       ((eq? '! (operator exp)) (not (mathValue (operand1 exp) type state return continue break throw)))
       ((and (eq? (operator exp) '-) (null? (binaryExp exp))) (- 0 (mathValue (operand1 exp) type state)))
       ((eq? (operator exp) 'new) (createInstanceClosure (trueType exp) state))
-      ((and(and (and (eq? (operator exp) 'funcall) (eq? (caadr exp) 'dot)) (list? (cadr (cadr exp)))) (eq? (caadr (cadr exp)) 'new))
+      ((and (eq? (operator exp) 'funcall) (list? (cadr exp)) (eq? (caadr exp) 'dot) (list? (cadr (cadr exp))) (eq? (caadr (cadr exp)) 'new))
        (set-box! currentInstance (trueType (cadr (cadr exp))))
        (returnDotFunctionValue (cadr exp) (cons 'this (getActualParams exp)) state return continue break throw (car (createInstanceClosure (trueType (cadr (cadr exp))) state))))
-      ((and (and (eq? (operator exp) 'funcall) (eq? (caadr exp) 'dot)) (eq? (cadr (cadr exp)) 'super))
+      ((and (and (eq? (operator exp) 'funcall) (list? (cadr exp)) (eq? (caadr exp) 'dot)) (eq? (cadr (cadr exp)) 'super))
        (set-box! currentInstance (cadr (cadr exp)))
-       (if (inState? 'this state) (returnDotFunctionValue (cadr exp) (cons 'this (getActualParams exp)) (replaceInState 'this type (addToState 'super (setSuperClassFields (caddr type) type state) state)) return continue break throw (caddr type))
+       (if (inState? 'this state) (returnDotFunctionValue (cadr exp) (cons 'this (getActualParams exp)) (addToState 'super (setSuperClassFields (caddr type) type state) state) return continue break throw (caddr type))
            (returnDotFunctionValue (cadr exp) (cons 'this (getActualParams exp)) (addToState 'super (setSuperClassFields (caddr type) type state) state) return continue break throw type)))
-      ((and (eq? (operator exp) 'funcall) (eq? (caadr exp) 'dot))
+      ((and (eq? (operator exp) 'funcall) (list? (cadr exp)) (eq? (caadr exp) 'dot))
        (set-box! currentInstance (cadr (cadr exp)))
-       (returnDotFunctionValue (cadr exp) (cons 'this (getActualParams exp)) state return continue break throw type))
+       (if (inState? 'this state) (returnDotFunctionValue (cadr exp) (cons 'this (getActualParams exp)) state return continue break throw (searchState 'this state))
+       (returnDotFunctionValue (cadr exp) (cons 'this (getActualParams exp)) state return continue break throw type)))
       ((eq? (operator exp) 'funcall)
-       (returnFunctionValue (searchState (cadr exp) state) (cons 'this (getActualParams exp)) state return continue break throw type))
+       (returnFunctionValue (searchState (cadr exp) type) (cons 'this (getActualParams exp)) state return continue break throw type))
       ((eq? (operator exp) 'dot)
        (set-box! currentInstance (cadr exp))
        (dotGetFieldValue exp state))
@@ -494,9 +503,17 @@
 
 (define searchForFieldValue
   (lambda (var instance state)
-    (if (null? (searchInstance var state))
-        (searchState var instance)
-        (searchInstance var state))))
+    (cond
+      ((inState? 'this state)
+       (if (null? (searchInstance var state))
+           (if (null? (searchInstance var (list (cadr (searchState 'this state)))))
+               (searchState var (list (cadr instance)))
+               (searchInstance var (list (cadr (searchState 'this state)))))
+           (searchInstance var state)))
+       (else
+        (if (null? (searchInstance var state))
+           (searchState var (list (cadr instance)))
+           (searchInstance var state))))))
 (define searchInstance
   (lambda (var state)
     (logln "Searching instance for " var)
@@ -541,6 +558,8 @@
     (logln "in " state)
     (cond
       ((null? state) (error "Variable/Function not in scope"))
+      ;((and (null? (cdr state)) (not (list? (car (car (car state)))))) (searchState var (car state)))
+      ((not (list? (car (car state)))) (searchState var (list state)))
       ((or (null? (nameBindings state)) (null? (valueBindings state))) (searchState var (nextLayers state)))
       ((eq? var (searchCurrentName state)) (searchCurrentValue state))
       ((null? (restOfNames (nameBindings state))) (searchState var (nextLayers state)))
@@ -576,6 +595,7 @@
     ;if variable found, replace it, otherwise keep going through layer
     (cond
       ((null? state) (error "Variable not in scope"))
+      ;((null? (cdr state)) (replaceInState var val (car state)))
       ((inLayer? var (firstLayer state)) (cons (replaceInLayer var val (firstLayer state)) (nextLayers state)))
       (else (cons (firstLayer state) (replaceInState var val (nextLayers state)))))))
 
@@ -703,7 +723,7 @@
     (error "Thrown statement not caught")))
 
 
-(define verbose #t)
+(define verbose #f)
 (define logln
   (lambda (title val)
     (if verbose
