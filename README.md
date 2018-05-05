@@ -1,28 +1,65 @@
 # interpreter-scheme
 
 An interpreter for a Java/C style language written in scheme.
-To run a program file, call (interpret "file_name")
+To run a program file, call (interpret "file_name" "class_name)
 
 
 Sample Program:
 ```
-var x = 14;
-var y = 3 * x - 7;
-function gcd(a,b) {
-  if (a < b) {
-    var temp = a;
-    a = b;
-    b = temp;
+class Shape {
+  function area() {
+    return 0;
   }
-  var r = a % b;
-  while (r != 0) {
-    a = b;
-    b = r;
-    r = a % b;
-  }
-  return b;
 }
-function main () {
-  return gcd(x,y);
+
+class Rectangle extends Shape {
+  var height;
+  var width;
+
+  function setHeight(h) {
+    height = h;
+  }
+
+  function setWidth(w) {
+    width = w;
+  }
+
+  function getHeight() {
+    return height;
+  }
+
+  function getWidth() {
+    return width;
+  }
+
+  function area() {
+    return getWidth() * getHeight();
+  }
+}
+
+class Square extends Rectangle {
+  function setSize(size) {
+    super.setWidth(size);
+  }
+
+  function getHeight() {
+    return super.getWidth();
+  }
+
+  function setHeight(h) {
+    super.setWidth(h);
+  }
+
+  static function main() {
+    var s = new Square();
+    var sum = 0;
+    s.setSize(10);
+    sum = sum + s.area();
+    s.setHeight(4);
+    sum = sum + s.area();
+    s.setWidth(1);
+    sum = sum + s.area();
+    return sum;
+  }
 }
 ```
